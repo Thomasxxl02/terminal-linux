@@ -1,0 +1,552 @@
+import React, { useState } from "react";
+import {
+  Sliders,
+  Plus,
+  Trash2,
+  Edit2,
+  Play,
+  RotateCcw,
+  CheckCircle2,
+  BookmarkCheck,
+  Sparkles,
+  Layers
+} from "lucide-react";
+import { ShellProfile, SavedTabSession, TerminalSessionInfo } from "../types";
+import { useLocalStorage } from "../hooks/useLocalStorage";
+
+const DEFAULT_PROFILES: ShellProfile[] = [
+  {
+    id: "profile_bash_default",
+    name: "Bash Standard (Dev)",
+    shell: "/bin/bash",
+    cwd: process.cwd ? process.cwd() : "/",
+    env: {
+      COLORTERM: "truecolor",
+      TERM: "xterm-256color",
+      EDITOR: "nano"
+    },
+    color: "#10b981",
+    iconName: "Terminal",
+    isDefault: true
+  },
+  {
+    id: "profile_zsh_sysadmin",
+    name: "Zsh System Admin",
+    shell: "/bin/zsh",
+    cwd: "/var/log",
+    env: {
+      COLORTERM: "truecolor",
+      LOG_LEVEL: "debug",
+      PAGER: "cat"
+    },
+    color: "#3b82f6",
+    iconName: "Sliders"
+  },
+  {
+    id: "profile_fish_analytics",
+    name: "Fish Shell Analytics",
+    shell: "fish",
+    cwd: "/tmp",
+    env: {
+      PYTHONUNBUFFERED: "1"
+    },
+    color: "#ec4899",
+    iconName: "Sparkles"
+  },
+  {
+    id: "profile_sh_minimal",
+    name: "POSIX Sh Sandbox",
+    shell: "/bin/sh",
+    cwd: "/",
+    env: {
+      PATH: "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+    },
+    color: "#f59e0b",
+    iconName: "Layers"
+  }
+];
+
+const STORAGE_KEY_PROFILES = "tauri_linux_shell_profiles";
+const STORAGE_KEY_SAVED_TABS = "tauri_linux_saved_tabs";
+
+interface ProfileManagerProps {
+  onLaunchProfile: (profile: ShellProfile) => void;
+  activeSessions: TerminalSessionInfo[];
+  onRestoreSavedTabs: (tabs: SavedTabSession[]) => void;
+}
+
+export const ProfileManager: React.FC<ProfileManagerProps> = ({
+  onLaunchProfile,
+  activeSessions,
+  onRestoreSavedTabs,
+}) => {
+  const [profiles, setProfiles] = useLocalStorage<ShellProfile[]>(
+    STORAGE_KEY_PROFILES,
+    DEFAULT_PROFILES
+  );
+  const [savedTabs, setSavedTabs] = useLocalStorage<SavedTabSession[]>(
+    STORAGE_KEY_SAVED_TABS,
+    []
+  );
+  const [editingProfile, setEditingProfile] = useState<ShellProfile | null>(null);
+  const [isCreating, setIsCreating] = useState(false);
+  const [successBanner, setSuccessBanner] = useState<string | null>(null);
+
+  // Form states
+  const [formName, setFormName] = useState("");
+  const [formShell, setFormShell] = useState("/bin/bash");
+  const [formCwd, setFormCwd] = useState("/");
+  const [formColor, setFormColor] = useState("#10b981");
+  const [envPairs, setEnvPairs] = useState<{ key: string; value: string }[]>([
+    { key: "COLORTERM", value: "truecolor" }
+  ]);
+
+  const handleOpenCreateModal = () => {
+    setFormName("Nouveau Profil Custom");
+    setFormShell("/bin/bash");
+    setFormCwd("/");
+    setFormColor("#6366f1");
+    setEnvPairs([{ key: "CUSTOM_VAR", value: "value" }]);
+    setEditingProfile(null);
+    setIsCreating(true);
+  };
+
+  const handleOpenEditModal = (profile: ShellProfile) => {
+    setFormName(profile.name);
+    setFormShell(profile.shell);
+    setFormCwd(profile.cwd);
+    setFormColor(profile.color);
+    const envArray = Object.entries(profile.env).map(([key, value]) => ({ key, value }));
+    setEnvPairs(envArray.length > 0 ? envArray : [{ key: "", value: "" }]);
+    setEditingProfile(profile);
+    setIsCreating(true);
+  };
+
+  const handleSaveProfile = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formName.trim()) return;
+
+    const envMap: Record<string, string> = {};
+    envPairs.forEach((pair) => {
+      if (pair.key.trim()) {
+        envMap[pair.key.trim()] = pair.value;
+      }
+    });
+
+    if (editingProfile) {
+      const updated = profiles.map((p) =>
+        p.id === editingProfile.id
+          ? {
+              ...p,
+              name: formName,
+              shell: formShell,
+              cwd: formCwd,
+              color: formColor,
+              env: envMap,
+            }
+          : p
+      );
+      setProfiles(updated);
+      showNotification("Profil mis à jour avec succès");
+    } else {
+      const newProf: ShellProfile = {
+        id: `profile_${Date.now()}`,
+        name: formName,
+        shell: formShell,
+        cwd: formCwd,
+        color: formColor,
+        env: envMap,
+      };
+      setProfiles([...profiles, newProf]);
+      showNotification("Nouveau profil shell créé !");
+    }
+
+    setIsCreating(false);
+    setEditingProfile(null);
+  };
+
+  const handleDeleteProfile = (id: string) => {
+    const updated = profiles.filter((p) => p.id !== id);
+    setProfiles(updated);
+    showNotification("Profil supprimé.");
+  };
+
+  const handleSetDefaultProfile = (id: string) => {
+    const updated = profiles.map((p) => ({
+      ...p,
+      isDefault: p.id === id,
+    }));
+    setProfiles(updated);
+    showNotification("Profil par défaut mis à jour");
+  };
+
+  // Tab Persistence Actions
+  const handleSaveCurrentActiveTabs = () => {
+    if (activeSessions.length === 0) return;
+    const tabsToSave: SavedTabSession[] = activeSessions.map((s) => ({
+      id: s.id,
+      name: s.name,
+      shell: s.shell,
+      cwd: s.cwd,
+    }));
+    setSavedTabs(tabsToSave);
+    try {
+      localStorage.setItem(STORAGE_KEY_SAVED_TABS, JSON.stringify(tabsToSave));
+    } catch {}
+    showNotification(`${tabsToSave.length} onglet(s) sauvegardé(s) pour la persistance !`);
+  };
+
+  const handleRestoreTabs = () => {
+    if (savedTabs.length > 0) {
+      onRestoreSavedTabs(savedTabs);
+      showNotification("Restauration des onglets en cours...");
+    }
+  };
+
+  const showNotification = (msg: string) => {
+    setSuccessBanner(msg);
+    setTimeout(() => setSuccessBanner(null), 3000);
+  };
+
+  return (
+    <div className="flex-1 bg-slate-950 text-slate-100 flex flex-col h-full overflow-hidden">
+      {/* Top Banner */}
+      <div className="p-4 bg-slate-900 border-b border-slate-800 flex items-center justify-between shrink-0">
+        <div className="flex items-center gap-3">
+          <div className="p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400">
+            <Sliders className="w-5 h-5" />
+          </div>
+          <div>
+            <h2 className="text-base font-semibold text-slate-100 flex items-center gap-2">
+              Gestionnaire de Profils & Environnements Shell
+              <span className="text-xs font-mono px-2 py-0.5 rounded-full bg-slate-800 text-emerald-400 border border-slate-700">
+                {profiles.length} Profils
+              </span>
+            </h2>
+            <p className="text-xs text-slate-400">
+              Configurez des shells personnalisés (/bin/bash, /bin/zsh, fish), dossiers initiaux et variables d'environnement.
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleSaveCurrentActiveTabs}
+            disabled={activeSessions.length === 0}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-40 text-slate-200 text-xs font-mono rounded-lg border border-slate-700 transition-colors"
+            title="Sauvegarder les onglets PTY actuellement ouverts dans le stockage local"
+          >
+            <BookmarkCheck className="w-4 h-4 text-emerald-400" />
+            <span>Sauvegarder Session ({activeSessions.length})</span>
+          </button>
+
+          <button
+            onClick={handleOpenCreateModal}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-bold text-xs font-mono rounded-lg shadow transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Créer un Profil</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Alert Banner */}
+      {successBanner && (
+        <div className="mx-4 mt-3 px-4 py-2 bg-emerald-500/20 border border-emerald-500/40 rounded-lg text-emerald-200 text-xs font-mono flex items-center gap-2 shrink-0">
+          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+          <span>{successBanner}</span>
+        </div>
+      )}
+
+      {/* Main Content Area */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-6 custom-scrollbar">
+        {/* Saved Session Restoration Box */}
+        {savedTabs.length > 0 && (
+          <div className="p-4 bg-slate-900/80 border border-slate-800 rounded-xl flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded bg-indigo-500/10 border border-indigo-500/30 text-indigo-400">
+                <RotateCcw className="w-5 h-5" />
+              </div>
+              <div>
+                <h4 className="text-xs font-semibold text-slate-200 uppercase tracking-wider font-mono">
+                  Persistance des Onglets Sauvegardés ({savedTabs.length} Terminal(s))
+                </h4>
+                <div className="flex items-center gap-2 mt-1">
+                  {savedTabs.map((t, idx) => (
+                    <span
+                      key={idx}
+                      className="text-[11px] font-mono px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700"
+                    >
+                      {t.name} ({t.shell})
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <button
+              onClick={handleRestoreTabs}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-slate-100 font-mono text-xs font-bold rounded-lg shadow transition-colors"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              Restaurer la Session
+            </button>
+          </div>
+        )}
+
+        {/* Profiles Grid */}
+        <div>
+          <h3 className="text-xs font-mono uppercase tracking-wider text-slate-400 mb-3 font-semibold flex items-center justify-between">
+            <span>PROFILS SHELL DISPONIBLES</span>
+            <span className="text-[11px] text-slate-500">Cliquez sur "Lancer" pour ouvrir un terminal avec cette configuration</span>
+          </h3>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {profiles.map((prof) => (
+              <div
+                key={prof.id}
+                className="bg-slate-900 border border-slate-800 hover:border-slate-700 rounded-xl p-4 flex flex-col justify-between transition-all shadow-md group relative overflow-hidden"
+              >
+                {/* Accent Color Strip */}
+                <div
+                  className="absolute top-0 left-0 right-0 h-1"
+                  style={{ backgroundColor: prof.color }}
+                />
+
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <div
+                        className="w-3 h-3 rounded-full"
+                        style={{ backgroundColor: prof.color }}
+                      />
+                      <h4 className="font-semibold text-slate-100 text-sm">{prof.name}</h4>
+                    </div>
+
+                    {prof.isDefault ? (
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                        Par Défaut
+                      </span>
+                    ) : (
+                      <button
+                        onClick={() => handleSetDefaultProfile(prof.id)}
+                        className="text-[10px] font-mono text-slate-500 hover:text-slate-300 opacity-0 group-hover:opacity-100 transition-opacity"
+                      >
+                        Définir par défaut
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="space-y-1.5 my-3 font-mono text-xs">
+                    <div className="flex items-center justify-between bg-slate-950 px-2.5 py-1.5 rounded border border-slate-800 text-slate-300">
+                      <span className="text-slate-500 text-[11px]">Shell Exec:</span>
+                      <span className="text-emerald-400 font-bold">{prof.shell}</span>
+                    </div>
+
+                    <div className="flex items-center justify-between bg-slate-950 px-2.5 py-1.5 rounded border border-slate-800 text-slate-300">
+                      <span className="text-slate-500 text-[11px]">CWD Initial:</span>
+                      <span className="text-slate-300 truncate max-w-[180px]" title={prof.cwd}>
+                        {prof.cwd}
+                      </span>
+                    </div>
+
+                    {/* Env Vars count */}
+                    <div className="flex items-center justify-between bg-slate-950 px-2.5 py-1.5 rounded border border-slate-800 text-slate-300">
+                      <span className="text-slate-500 text-[11px]">Env Custom:</span>
+                      <span className="text-slate-400 text-[11px]">
+                        {Object.keys(prof.env).length} variable(s)
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Environment Vars preview chips */}
+                  {Object.keys(prof.env).length > 0 && (
+                    <div className="flex flex-wrap gap-1 mb-3">
+                      {Object.entries(prof.env).map(([k, v]) => (
+                        <span
+                          key={k}
+                          className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700/80"
+                        >
+                          {k}={v}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Card Actions Footer */}
+                <div className="pt-3 border-t border-slate-800/80 flex items-center justify-between mt-2">
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => handleOpenEditModal(prof)}
+                      className="p-1.5 rounded hover:bg-slate-800 text-slate-400 hover:text-slate-200 transition-colors"
+                      title="Éditer le profil"
+                    >
+                      <Edit2 className="w-3.5 h-3.5" />
+                    </button>
+                    {!prof.isDefault && (
+                      <button
+                        onClick={() => handleDeleteProfile(prof.id)}
+                        className="p-1.5 rounded hover:bg-red-500/10 text-slate-400 hover:text-red-400 transition-colors"
+                        title="Supprimer"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+
+                  <button
+                    onClick={() => onLaunchProfile(prof)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-bold text-xs font-mono rounded shadow transition-colors"
+                  >
+                    <Play className="w-3.5 h-3.5 fill-current" />
+                    <span>Lancer PTY</span>
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Modal / Form drawer for Create & Edit */}
+      {isCreating && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-lg bg-slate-900 border border-slate-800 rounded-xl shadow-2xl p-6 overflow-hidden flex flex-col">
+            <h3 className="text-base font-semibold text-slate-100 mb-4 flex items-center gap-2">
+              <Sliders className="w-5 h-5 text-emerald-400" />
+              {editingProfile ? "Éditer le Profil Shell" : "Créer un Nouveau Profil Shell"}
+            </h3>
+
+            <form onSubmit={handleSaveProfile} className="space-y-4 font-mono text-xs">
+              <div>
+                <label className="block text-slate-400 mb-1">Nom du Profil</label>
+                <input
+                  type="text"
+                  value={formName}
+                  onChange={(e) => setFormName(e.target.value)}
+                  placeholder="Ex: Python Data Science"
+                  className="w-full bg-slate-950 border border-slate-800 rounded px-3 py-2 text-slate-100 focus:outline-none focus:border-emerald-500"
+                  required
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-400 mb-1">Exécutable Shell</label>
+                  <select
+                    value={formShell}
+                    onChange={(e) => setFormShell(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded px-3 py-2 text-slate-100 focus:outline-none focus:border-emerald-500"
+                  >
+                    <option value="/bin/bash">/bin/bash</option>
+                    <option value="/bin/zsh">/bin/zsh</option>
+                    <option value="fish">fish</option>
+                    <option value="/bin/sh">/bin/sh</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-slate-400 mb-1">Couleur d'accent</label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="color"
+                      value={formColor}
+                      onChange={(e) => setFormColor(e.target.value)}
+                      className="w-10 h-9 bg-slate-950 border border-slate-800 rounded cursor-pointer"
+                    />
+                    <input
+                      type="text"
+                      value={formColor}
+                      onChange={(e) => setFormColor(e.target.value)}
+                      className="flex-1 bg-slate-950 border border-slate-800 rounded px-3 py-2 text-slate-100 focus:outline-none"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-slate-400 mb-1">Répertoire de travail initial (CWD)</label>
+                <input
+                  type="text"
+                  value={formCwd}
+                  onChange={(e) => setFormCwd(e.target.value)}
+                  placeholder="Ex: /var/log ou /tmp"
+                  className="w-full bg-slate-950 border border-slate-800 rounded px-3 py-2 text-slate-100 focus:outline-none focus:border-emerald-500"
+                  required
+                />
+              </div>
+
+              {/* Dynamic Key-Value Environment Variables */}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-slate-400">Variables d'Environnement (Key=Value)</label>
+                  <button
+                    type="button"
+                    onClick={() => setEnvPairs([...envPairs, { key: "", value: "" }])}
+                    className="text-[11px] text-emerald-400 hover:underline flex items-center gap-1"
+                  >
+                    <Plus className="w-3 h-3" /> Ajouter Var
+                  </button>
+                </div>
+
+                <div className="space-y-2 max-h-36 overflow-y-auto custom-scrollbar p-1 bg-slate-950 rounded border border-slate-800">
+                  {envPairs.map((pair, idx) => (
+                    <div key={idx} className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        placeholder="KEY (ex: EDITOR)"
+                        value={pair.key}
+                        onChange={(e) => {
+                          const updated = [...envPairs];
+                          updated[idx].key = e.target.value;
+                          setEnvPairs(updated);
+                        }}
+                        className="flex-1 bg-slate-900 border border-slate-800 rounded px-2 py-1 text-slate-100 focus:outline-none"
+                      />
+                      <span className="text-slate-500">=</span>
+                      <input
+                        type="text"
+                        placeholder="VALUE (ex: vim)"
+                        value={pair.value}
+                        onChange={(e) => {
+                          const updated = [...envPairs];
+                          updated[idx].value = e.target.value;
+                          setEnvPairs(updated);
+                        }}
+                        className="flex-1 bg-slate-900 border border-slate-800 rounded px-2 py-1 text-slate-100 focus:outline-none"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setEnvPairs(envPairs.filter((_, i) => i !== idx))}
+                        className="text-slate-500 hover:text-red-400 p-1"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="pt-4 flex items-center justify-end gap-3 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setIsCreating(false)}
+                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg"
+                >
+                  Annuler
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-bold rounded-lg shadow"
+                >
+                  Enregistrer
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};

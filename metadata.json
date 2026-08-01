@@ -1,0 +1,6 @@
+{
+  "name": "Linux Terminal Emulator",
+  "description": "Émulateur de terminal Linux haute performance avec xterm.js, Monaco Editor, onglets multiples, gestion PTY bidirectionnelle, maintenance système et éditeur de fichiers.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
