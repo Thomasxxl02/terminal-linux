@@ -15,7 +15,8 @@ import {
   Monitor,
   Sliders,
   Layers,
-  Key
+  Key,
+  Zap
 } from "lucide-react";
 import { TerminalSessionInfo, SystemStats } from "../types";
 
@@ -43,6 +44,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const navItems = [
     { id: "terminal", label: "Terminaux PTY", icon: Terminal, badge: sessions.length },
     { id: "ssh", label: "Carnet SSH & Tunnels", icon: Key, badge: "Hosts" },
+    { id: "tunnels", label: "Tunnels & Reverse Proxy", icon: Zap, badge: "PortFWD" },
     { id: "profiles", label: "Profils & Shells", icon: Sliders, badge: "Custom" },
     { id: "playbooks", label: "Automation Playbooks", icon: Layers, badge: "Pipelines" },
     { id: "maintenance", label: "Maintenance Système", icon: Wrench, badge: "APT/Cache" },

@@ -144,8 +144,8 @@ interface PlaybookSequencerProps {
 }
 
 export const PlaybookSequencer: React.FC<PlaybookSequencerProps> = ({
-  sessions,
-  activeSessionId,
+  sessions = [],
+  activeSessionId = null,
   onExecuteCommandInTerminal,
   onOpenTerminalView,
 }) => {

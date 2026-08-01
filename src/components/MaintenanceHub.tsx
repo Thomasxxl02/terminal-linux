@@ -24,8 +24,8 @@ interface MaintenanceHubProps {
 }
 
 export const MaintenanceHub: React.FC<MaintenanceHubProps> = ({
-  sessions,
-  activeSessionId,
+  sessions = [],
+  activeSessionId = null,
   onExecuteInTerminal,
 }) => {
   const [selectedSessionId, setSelectedSessionId] = useState<string>(

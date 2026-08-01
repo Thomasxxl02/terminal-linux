@@ -22,11 +22,15 @@ interface PtySession {
   flushTimer: NodeJS.Timeout | null;
 }
 
-const app = express();
+export const app = express();
 const PORT = 3000;
-const server = http.createServer(app);
+export const server = http.createServer(app);
 
 app.use(express.json());
+
+app.get("/api/health", (req, res) => {
+  res.json({ status: "ok", service: "Tauri Terminal PTY Backend" });
+});
 
 // In-memory active PTY sessions
 const ptySessions = new Map<string, PtySession>();
@@ -489,8 +493,35 @@ app.post("/api/fs/write", async (req, res) => {
 
 // Tauri + Rust Architecture Code Export Provider
 app.get("/api/tauri/source", (req, res) => {
+  const cargoPath = path.join(process.cwd(), "src-tauri", "Cargo.toml");
+  const mainRsPath = path.join(process.cwd(), "src-tauri", "src", "main.rs");
+  const ptyRsPath = path.join(process.cwd(), "src-tauri", "src", "pty.rs");
+  const tauriConfPath = path.join(process.cwd(), "src-tauri", "tauri.conf.json");
+
+  let cargoToml = "";
+  let mainRs = "";
+  let ptyRs = "";
+  let tauriConfJson = "";
+
+  try {
+    if (fs.existsSync(cargoPath)) {
+      cargoToml = fs.readFileSync(cargoPath, "utf-8");
+    }
+    if (fs.existsSync(mainRsPath)) {
+      mainRs = fs.readFileSync(mainRsPath, "utf-8");
+    }
+    if (fs.existsSync(ptyRsPath)) {
+      ptyRs = fs.readFileSync(ptyRsPath, "utf-8");
+    }
+    if (fs.existsSync(tauriConfPath)) {
+      tauriConfJson = fs.readFileSync(tauriConfPath, "utf-8");
+    }
+  } catch (err) {
+    console.error("Failed to read actual Tauri source files from disk:", err);
+  }
+
   res.json({
-    cargoToml: `[package]
+    cargoToml: cargoToml || `[package]
 name = "tauri-linux-terminal"
 version = "0.1.0"
 description = "Linux Terminal Emulator powered by Tauri, Rust & portable-pty"
@@ -510,7 +541,7 @@ anyhow = "1.0"
 log = "0.4"
 env_logger = "0.10"
 `,
-    mainRs: `// src-tauri/src/main.rs
+    mainRs: mainRs || `// src-tauri/src/main.rs
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod pty;
@@ -570,7 +601,7 @@ fn main() {
         .expect("Erreur lors du lancement de l'application Tauri");
 }
 `,
-    ptyRs: `// src-tauri/src/pty.rs
+    ptyRs: ptyRs || `// src-tauri/src/pty.rs
 use portable_pty::{native_pty_system, CommandBuilder, PtyPair, PtySize};
 use std::collections::HashMap;
 use std::io::{Read, Write};
@@ -663,7 +694,7 @@ impl PtyManager {
     }
 }
 `,
-    tauriConfJson: `{
+    tauriConfJson: tauriConfJson || `{
   "build": {
     "beforeDevCommand": "npm run dev",
     "beforeBuildCommand": "npm run build",
@@ -725,4 +756,6 @@ async function startServer() {
   });
 }
 
-startServer();
+if (process.env.NODE_ENV !== "test" && !process.env.VITEST) {
+  startServer();
+}

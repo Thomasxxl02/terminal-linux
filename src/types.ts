@@ -124,6 +124,21 @@ export interface SshHost {
   description?: string;
 }
 
+export interface SshTunnel {
+  id: string;
+  name: string;
+  hostId: string;
+  type: 'local' | 'remote' | 'dynamic';
+  localPort: number;
+  remoteHost: string;
+  remotePort: number;
+  status: 'active' | 'inactive';
+  createdAt: number;
+  trafficSent?: number;
+  trafficReceived?: number;
+  latency?: number;
+}
+
 export interface TauriSourceCode {
   cargoToml: string;
   mainRs: string;

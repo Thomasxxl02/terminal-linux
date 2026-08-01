@@ -10,6 +10,7 @@ import { CommandPalette } from "./components/CommandPalette";
 import { ProfileManager } from "./components/ProfileManager";
 import { PlaybookSequencer } from "./components/PlaybookSequencer";
 import { SshHostManager } from "./components/SshHostManager";
+import { SshTunnelManager } from "./components/SshTunnelManager";
 import { TerminalSessionInfo, SystemStats, ShellProfile, SavedTabSession, SshHost } from "./types";
 
 const MonacoFileEditor = lazy(() =>
@@ -394,6 +395,14 @@ export default function App() {
           <SshHostManager
             onExecuteInTerminal={handleExecuteInTerminal}
             onLaunchSshSession={handleLaunchSshSession}
+            sessions={sessions}
+            activeSessionId={activeSessionId}
+          />
+        )}
+
+        {activeView === "tunnels" && (
+          <SshTunnelManager
+            onExecuteInTerminal={handleExecuteInTerminal}
             sessions={sessions}
             activeSessionId={activeSessionId}
           />
