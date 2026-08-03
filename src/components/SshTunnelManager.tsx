@@ -24,7 +24,11 @@ import {
   Search,
   ExternalLink,
   ChevronRight,
-  Monitor
+  Monitor,
+  CheckCircle,
+  XCircle,
+  Workflow,
+  Sparkles
 } from "lucide-react";
 import { SshHost, SshTunnel, TerminalSessionInfo } from "../types";
 import { useLocalStorage } from "../hooks/useLocalStorage";
@@ -88,6 +92,8 @@ const DEFAULT_TUNNELS: SshTunnel[] = [
     trafficSent: 154200,
     trafficReceived: 894500,
     latency: 35,
+    serverAliveInterval: 60,
+    exitOnFailure: true
   },
   {
     id: "tunnel-web",
@@ -102,6 +108,8 @@ const DEFAULT_TUNNELS: SshTunnel[] = [
     trafficSent: 54100,
     trafficReceived: 213000,
     latency: 18,
+    serverAliveInterval: 30,
+    exitOnFailure: true
   },
   {
     id: "tunnel-socks",
@@ -116,6 +124,8 @@ const DEFAULT_TUNNELS: SshTunnel[] = [
     trafficSent: 1205000,
     trafficReceived: 9845000,
     latency: 45,
+    serverAliveInterval: 60,
+    exitOnFailure: false
   }
 ];
 
@@ -140,6 +150,13 @@ export const SshTunnelManager: React.FC<SshTunnelManagerProps> = ({
   const [editingTunnel, setEditingTunnel] = useState<SshTunnel | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
+  // Port Conflict States
+  const [checkPortInput, setCheckPortInput] = useState<string>("8080");
+  const [portCheckResult, setPortCheckResult] = useState<{ status: 'occupied' | 'free'; message: string; suggestions: string[] } | null>(null);
+
+  // Live Chart History simulation state
+  const [chartHistory, setChartHistory] = useState<Record<string, number[]>>({});
+
   // Diagnostic panel state
   const [diagnosticTunnelId, setDiagnosticTunnelId] = useState<string | null>(null);
   const [diagnosticLogs, setDiagnosticLogs] = useState<string[]>([]);
@@ -152,8 +169,10 @@ export const SshTunnelManager: React.FC<SshTunnelManagerProps> = ({
   const [formLocalPort, setFormLocalPort] = useState<number>(8080);
   const [formRemoteHost, setFormRemoteHost] = useState("localhost");
   const [formRemotePort, setFormRemotePort] = useState<number>(80);
+  const [formAliveInterval, setFormAliveInterval] = useState<number>(60);
+  const [formExitOnFailure, setFormExitOnFailure] = useState<boolean>(true);
 
-  // Update mock active traffic
+  // Update mock active traffic and chart history
   useEffect(() => {
     const timer = setInterval(() => {
       setTunnels((prevTunnels) =>
@@ -164,6 +183,15 @@ export const SshTunnelManager: React.FC<SshTunnelManagerProps> = ({
             const recvAdd = Math.floor(Math.random() * 15000) + 500;
             const variance = Math.floor(Math.random() * 6) - 3;
             const newLatency = Math.max(5, (t.latency || 20) + variance);
+
+            // Record history for sparkline
+            const latestRate = (sentAdd + recvAdd) / 1024; // KB/s
+            setChartHistory((prev) => {
+              const currentList = prev[t.id] || Array(12).fill(10);
+              const updatedList = [...currentList.slice(1), parseFloat(latestRate.toFixed(1))];
+              return { ...prev, [t.id]: updatedList };
+            });
+
             return {
               ...t,
               trafficSent: (t.trafficSent || 0) + sentAdd,
@@ -208,6 +236,13 @@ export const SshTunnelManager: React.FC<SshTunnelManagerProps> = ({
       cmd += `-i "${host.privateKeyPath}" `;
     }
 
+    // Keep alive policies
+    const interval = t.serverAliveInterval || 60;
+    cmd += `-o ServerAliveInterval=${interval} `;
+    if (t.exitOnFailure) {
+      cmd += `-o ExitOnForwardFailure=yes `;
+    }
+
     if (t.type === "local") {
       cmd += `-L ${t.localPort}:${t.remoteHost}:${t.remotePort} `;
     } else if (t.type === "remote") {
@@ -228,6 +263,8 @@ export const SshTunnelManager: React.FC<SshTunnelManagerProps> = ({
     setFormLocalPort(8080);
     setFormRemoteHost("localhost");
     setFormRemotePort(80);
+    setFormAliveInterval(60);
+    setFormExitOnFailure(true);
     setIsModalOpen(true);
   };
 
@@ -239,6 +276,8 @@ export const SshTunnelManager: React.FC<SshTunnelManagerProps> = ({
     setFormLocalPort(t.localPort);
     setFormRemoteHost(t.remoteHost);
     setFormRemotePort(t.remotePort);
+    setFormAliveInterval(t.serverAliveInterval || 60);
+    setFormExitOnFailure(t.exitOnFailure !== false);
     setIsModalOpen(true);
   };
 
@@ -257,6 +296,8 @@ export const SshTunnelManager: React.FC<SshTunnelManagerProps> = ({
               localPort: Number(formLocalPort),
               remoteHost: formType === "dynamic" ? "127.0.0.1" : formRemoteHost,
               remotePort: formType === "dynamic" ? 0 : Number(formRemotePort),
+              serverAliveInterval: Number(formAliveInterval),
+              exitOnFailure: formExitOnFailure
             }
           : t
       );
@@ -275,30 +316,37 @@ export const SshTunnelManager: React.FC<SshTunnelManagerProps> = ({
         trafficSent: 0,
         trafficReceived: 0,
         latency: 0,
+        serverAliveInterval: Number(formAliveInterval),
+        exitOnFailure: formExitOnFailure
       };
       setTunnels([...tunnels, newTunnel]);
     }
+
     setIsModalOpen(false);
   };
 
   const handleDeleteTunnel = (id: string) => {
     setTunnels(tunnels.filter((t) => t.id !== id));
-    if (diagnosticTunnelId === id) {
-      setDiagnosticTunnelId(null);
-    }
   };
 
-  const handleToggleStatus = (id: string) => {
-    setTunnels(
-      tunnels.map((t) => {
+  const handleToggleTunnelStatus = (id: string) => {
+    setTunnels((prev) =>
+      prev.map((t) => {
         if (t.id === id) {
           const newStatus = t.status === "active" ? "inactive" : "active";
+          // Initialize sparkline on activation
+          if (newStatus === "active") {
+            setChartHistory((prevHist) => ({
+              ...prevHist,
+              [t.id]: Array(12).fill(15)
+            }));
+          }
           return {
             ...t,
             status: newStatus,
             trafficSent: newStatus === "active" ? 1024 : t.trafficSent,
             trafficReceived: newStatus === "active" ? 2048 : t.trafficReceived,
-            latency: newStatus === "active" ? 25 : 0,
+            latency: newStatus === "active" ? 22 : 0,
           };
         }
         return t;
@@ -313,554 +361,568 @@ export const SshTunnelManager: React.FC<SshTunnelManagerProps> = ({
     setTimeout(() => setCopiedId(null), 2000);
   };
 
-  const handleLaunchInTerminal = (t: SshTunnel) => {
+  const handleExecuteCommand = (t: SshTunnel) => {
     const cmd = generateTunnelCommand(t);
-    // Mark as active in the UI
-    setTunnels(
-      tunnels.map((item) =>
-        item.id === t.id ? { ...item, status: "active", trafficSent: 1200, trafficReceived: 2400 } : item
-      )
-    );
-    // Execute command in current active or new terminal
-    onExecuteInTerminal(cmd, activeSessionId || undefined);
+    onExecuteInTerminal(cmd);
+    handleToggleTunnelStatus(t.id);
   };
 
+  // Diagnostic tool simulator
   const handleRunDiagnostic = (t: SshTunnel) => {
     setDiagnosticTunnelId(t.id);
-    setIsDiagnosing(true);
     setDiagnosticLogs([]);
+    setIsDiagnosing(true);
 
-    const host = getHostDetails(t.hostId);
-    if (!host) {
-      setDiagnosticLogs(["[ERREUR] Aucun hôte SSH valide associé à ce tunnel."]);
-      setIsDiagnosing(false);
-      return;
-    }
-
-    const steps = [
-      `[INFO] Démarrage du diagnostic pour le tunnel : "${t.name}"`,
-      `[INFO] Résolution DNS & test de routage IP vers l'hôte distant ${host.host}...`,
-      `[SUCCESS] Hôte ${host.host} résolu et accessible. Ping moyen : 24ms`,
-      `[INFO] Vérification de la disponibilité du port local ${t.localPort} sur la machine...`,
-      `[SUCCESS] Port local ${t.localPort} disponible et libre de toute écoute.`,
-      `[INFO] Simulation de l'établissement de la poignée de main SSH (Port d'écoute : ${host.port})...`,
-      `[SUCCESS] Canal SSH sécurisé initialisé avec succès. Type d'auth: ${host.authType}`,
-      t.type === "local"
-        ? `[SUCCESS] Redirection locale active : localhost:${t.localPort} -> ${t.remoteHost}:${t.remotePort}`
-        : t.type === "remote"
-        ? `[SUCCESS] Redirection inverse (reverse proxy) active : distant:${t.remotePort} -> localhost:${t.localPort}`
-        : `[SUCCESS] Proxy dynamique SOCKS5 actif en local sur le port ${t.localPort}`,
-      `[SUCCESS] Diagnostic complet réussi ! Le tunnel est prêt à être lancé.`
+    const logs = [
+      `[DIAG] Test de diagnostic pour: ${t.name}`,
+      `[CHECK] Résolution DNS de l'hôte distant... OK`,
+      `[CHECK] Vérification du port local ${t.localPort}... Port disponible.`,
+      `[SSH] Test d'initiation de la connexion asynchrone TCP...`,
+      `[SSH] Protocole de tunneling: Prise en charge ${t.type.toUpperCase()}`,
+      `[DIAG] Envoi de paquets de keep-alive (ServerAliveInterval: ${t.serverAliveInterval || 60}s)...`,
+      `[SUCCESS] Test d'établissement du bridge local <=> distant réussi ! Latence estimée: ${t.latency || 25}ms`
     ];
 
-    let currentStep = 0;
+    let index = 0;
     const interval = setInterval(() => {
-      if (currentStep < steps.length) {
-        setDiagnosticLogs((prev) => [...prev, steps[currentStep]]);
-        currentStep++;
+      if (index < logs.length) {
+        setDiagnosticLogs((prev) => [...prev, logs[index]]);
+        index++;
       } else {
         clearInterval(interval);
         setIsDiagnosing(false);
       }
-    }, 800);
+    }, 400);
+  };
+
+  // Local Port Conflict Checker
+  const handlePortCheck = () => {
+    const port = Number(checkPortInput);
+    if (!port || isNaN(port)) {
+      setPortCheckResult({
+        status: "occupied",
+        message: "Port invalide.",
+        suggestions: []
+      });
+      return;
+    }
+
+    // Common occupied services simulation
+    const commonServices: Record<number, string> = {
+      80: "Serveur Web HTTP (Nginx / Apache)",
+      443: "Serveur Web Sécurisé HTTPS",
+      3306: "Base de Données MySQL",
+      5432: "Base de Données PostgreSQL",
+      27017: "Base de Données MongoDB",
+      6379: "Magasin de clés Redis",
+      3000: "Application Node.js / React (Dev Server)",
+      8080: "Serveur d'application alternatif (Tomcat, Jenkins)"
+    };
+
+    const isSimulatedOccupied = [80, 443, 3306, 3000].includes(port);
+
+    if (isSimulatedOccupied) {
+      setPortCheckResult({
+        status: "occupied",
+        message: `Attention! Le port local ${port} semble occupé par : ${commonServices[port] || "un processus système alternatif"}.`,
+        suggestions: [
+          `Arrêtez le service concurrent sur votre machine locale.`,
+          `Utilisez la commande shell : lsof -i :${port} (puis kill -9 PID) ou netstat -tulnp | grep ${port} pour diagnostiquer.`,
+          `Changez le port local du tunnel SSH dans le formulaire pour un port aléatoire libre (ex: 18080).`
+        ]
+      });
+    } else {
+      setPortCheckResult({
+        status: "free",
+        message: `Félicitations ! Le port local ${port} est libre et prêt à être lié par votre tunnel SSH.`,
+        suggestions: [
+          `Vous pouvez l'utiliser directement pour vos redirections locales (-L).`
+        ]
+      });
+    }
   };
 
   const filteredTunnels = tunnels.filter((t) => {
-    const host = getHostDetails(t.hostId);
     const matchesSearch =
       t.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      t.localPort.toString().includes(searchQuery) ||
-      (host && host.name.toLowerCase().includes(searchQuery.toLowerCase())) ||
-      (host && host.host.toLowerCase().includes(searchQuery.toLowerCase()));
+      String(t.localPort).includes(searchQuery) ||
+      t.remoteHost.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesType = selectedType === "all" || t.type === selectedType;
     return matchesSearch && matchesType;
   });
 
   return (
-    <div className="flex-1 flex flex-col h-full bg-slate-950 text-slate-100 overflow-y-auto custom-scrollbar p-6">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 pb-5 border-b border-slate-800">
+    <div className="flex-1 bg-slate-950 text-slate-100 p-6 overflow-y-auto custom-scrollbar flex flex-col gap-6">
+      {/* Top Banner and Header */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 border-b border-slate-900 shrink-0">
         <div>
           <div className="flex items-center gap-2 mb-1">
-            <div className="w-8 h-8 rounded-lg bg-teal-500/10 border border-teal-500/20 flex items-center justify-center text-teal-400">
-              <Zap className="w-4 h-4" />
+            <div className="p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400">
+              <Zap className="w-5 h-5" />
             </div>
             <h2 className="text-lg font-bold text-slate-100 tracking-tight">
               Générateur & Testeur de Tunnels SSH / Reverse Proxy
             </h2>
           </div>
           <p className="text-xs text-slate-400">
-            Configurez vos redirections de ports (Local Forwarding, Remote Reverse Proxy, et Dynamic SOCKS5) associés aux hôtes de votre carnet SSH, testez leur validité et supervisez les métriques de trafic.
+            Créez des redirections de ports locales (-L), distantes (-R) ou des serveurs proxy SOCKS5 dynamiques (-D) avec diagnostic de bande passante intégré.
           </p>
         </div>
 
         <button
           onClick={handleOpenCreateModal}
-          className="px-4 py-2 bg-teal-600 hover:bg-teal-500 text-slate-950 font-bold text-xs font-mono rounded-lg shadow-md flex items-center gap-2 transition-all self-start md:self-auto"
+          className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-bold text-xs font-mono rounded-lg shadow-md flex items-center gap-2 transition-all self-start md:self-auto"
         >
           <Plus className="w-4 h-4 stroke-[3]" /> Créer un Tunnel SSH
         </button>
       </div>
 
-      {/* Filter bar */}
-      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 mb-6">
-        <div className="relative w-full sm:w-80">
+      {/* Main Filter & Control Bar */}
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0">
+        <div className="relative w-full sm:w-72">
           <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Rechercher nom, port local, hôte..."
-            className="w-full bg-slate-900 border border-slate-800 rounded-lg pl-9 pr-3 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-teal-500 font-mono"
+            className="w-full bg-slate-900 border border-slate-800 rounded-lg pl-9 pr-3 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-emerald-500 font-mono"
           />
         </div>
 
-        {/* Categories Tabs */}
+        {/* Categories Tab selector */}
         <div className="flex items-center gap-1.5 overflow-x-auto w-full sm:w-auto pb-1 sm:pb-0">
-          {[
-            { id: "all", label: "Tous les tunnels" },
-            { id: "local", label: "Local (-L)" },
-            { id: "remote", label: "Remote / Inverse (-R)" },
-            { id: "dynamic", label: "SOCKS Dynamique (-D)" }
-          ].map((item) => (
+          {["all", "local", "remote", "dynamic"].map((type) => (
             <button
-              key={item.id}
-              onClick={() => setSelectedType(item.id)}
+              key={type}
+              onClick={() => setSelectedType(type)}
               className={`px-3 py-1.5 rounded-md text-xs font-mono whitespace-nowrap transition-colors ${
-                selectedType === item.id
-                  ? "bg-teal-500/20 text-teal-300 border border-teal-500/30"
+                selectedType === type
+                  ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
                   : "bg-slate-900 text-slate-400 border border-slate-800 hover:text-slate-200"
               }`}
             >
-              {item.label}
+              {type === "all" ? "Tous les tunnels" : type.toUpperCase()}
             </button>
           ))}
         </div>
       </div>
 
-      {/* Main Grid & Diagnostic Panel */}
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 items-start">
-        {/* Left 2 Columns: Tunnel List */}
-        <div className="xl:col-span-2 space-y-4">
-          {filteredTunnels.map((t) => {
-            const host = getHostDetails(t.hostId);
-            const cmd = generateTunnelCommand(t);
-            const isActive = t.status === "active";
+      {/* Grid of Tunnel Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {filteredTunnels.map((tunnel) => {
+          const isTActive = tunnel.status === "active";
+          const hist = chartHistory[tunnel.id] || Array(12).fill(5);
 
-            return (
-              <div
-                key={t.id}
-                className={`bg-slate-900 border rounded-xl p-4 transition-all hover:shadow-lg ${
-                  isActive ? "border-teal-500/50 bg-slate-900/90" : "border-slate-800"
-                }`}
-              >
-                {/* Header info */}
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <span
-                      className={`w-2.5 h-2.5 rounded-full shrink-0 ${
-                        isActive ? "bg-teal-400 animate-pulse" : "bg-slate-600"
-                      }`}
-                    />
-                    <h3 className="font-bold text-slate-200 text-sm truncate">{t.name}</h3>
-                    <span
-                      className={`text-[9px] font-mono font-bold uppercase px-2 py-0.5 rounded shrink-0 ${
-                        t.type === "local"
-                          ? "bg-blue-500/10 text-blue-300 border border-blue-500/20"
-                          : t.type === "remote"
-                          ? "bg-purple-500/10 text-purple-300 border border-purple-500/20"
-                          : "bg-amber-500/10 text-amber-300 border border-amber-500/20"
-                      }`}
-                    >
-                      {t.type === "local" ? "Local -L" : t.type === "remote" ? "Remote -R" : "SOCKS -D"}
-                    </span>
-                  </div>
+          return (
+            <div
+              key={tunnel.id}
+              className={`bg-slate-900/80 border hover:border-slate-700 rounded-xl p-4 flex flex-col justify-between transition-all hover:shadow-lg relative overflow-hidden ${
+                isTActive ? "border-emerald-500/30 shadow-emerald-900/5" : "border-slate-800"
+              }`}
+            >
+              {/* Dynamic Animated Status Ring */}
+              <div className="flex items-start justify-between gap-2 mb-2">
+                <div className="flex items-center gap-2">
+                  <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${isTActive ? "bg-emerald-400 animate-pulse" : "bg-slate-600"}`} />
+                  <h3 className="font-bold text-slate-200 text-sm truncate">{tunnel.name}</h3>
+                </div>
+                <span className={`text-[9px] font-mono px-1.5 py-0.5 rounded uppercase shrink-0 font-semibold ${
+                  tunnel.type === "local" ? "bg-blue-500/15 text-blue-300 border border-blue-500/20" :
+                  tunnel.type === "remote" ? "bg-purple-500/15 text-purple-300 border border-purple-500/20" :
+                  "bg-amber-500/15 text-amber-300 border border-amber-500/20"
+                }`}>
+                  {tunnel.type}
+                </span>
+              </div>
 
-                  {/* Status Indicator */}
-                  <div className="flex items-center gap-1.5 self-end sm:self-auto">
-                    <span className="text-[10px] font-mono text-slate-400">Statut:</span>
-                    <span
-                      className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded ${
-                        isActive
-                          ? "bg-teal-500/15 text-teal-400 border border-teal-500/30"
-                          : "bg-slate-950 text-slate-400 border border-slate-800"
-                      }`}
-                    >
-                      {isActive ? "Actif" : "Inactif"}
-                    </span>
-                  </div>
+              {/* Tunnel Configuration Formula */}
+              <div className="space-y-1.5 my-3 bg-slate-950/70 p-3 rounded-lg border border-slate-800 font-mono text-xs text-slate-300">
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-500 text-[11px]">Serveur SSH:</span>
+                  <span className="text-slate-300 text-[11px] font-medium max-w-[150px] truncate" title={getHostName(tunnel.hostId)}>
+                    {getHostName(tunnel.hostId)}
+                  </span>
                 </div>
 
-                {/* Path representation */}
-                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 py-2 px-3 bg-slate-950/60 border border-slate-800/80 rounded-lg text-xs font-mono text-slate-300 mb-3">
-                  <div className="flex-1 flex flex-col">
-                    <span className="text-[10px] text-slate-500">Machine Locale</span>
-                    <span className="text-slate-200 font-bold">127.0.0.1:{t.localPort}</span>
-                  </div>
-
-                  <div className="flex items-center justify-center py-1 sm:py-0">
-                    <ArrowRight className={`w-4 h-4 shrink-0 ${isActive ? "text-teal-400 animate-bounce-h" : "text-slate-600"}`} />
-                  </div>
-
-                  <div className="flex-1 flex flex-col">
-                    <span className="text-[10px] text-slate-500">Serveur SSH Relais</span>
-                    <span className="text-emerald-400 font-semibold truncate">
-                      {host ? `${host.username}@${host.host}` : "Non configuré"}
-                    </span>
-                  </div>
-
-                  {t.type !== "dynamic" && (
-                    <>
-                      <div className="flex items-center justify-center py-1 sm:py-0">
-                        <ArrowRight className={`w-4 h-4 shrink-0 ${isActive ? "text-teal-400" : "text-slate-600"}`} />
-                      </div>
-
-                      <div className="flex-1 flex flex-col">
-                        <span className="text-[10px] text-slate-500">Cible Distante</span>
-                        <span className="text-blue-300 font-bold">
-                          {t.remoteHost}:{t.remotePort}
-                        </span>
-                      </div>
-                    </>
-                  )}
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-500 text-[11px]">Forward local:</span>
+                  <span className="text-emerald-400 font-bold font-mono">
+                    {tunnel.localPort}
+                  </span>
                 </div>
 
-                {/* Performance Metrics if active */}
-                {isActive && (
-                  <div className="grid grid-cols-3 gap-2 py-1.5 px-3 bg-teal-500/5 rounded-lg border border-teal-500/10 text-[11px] font-mono mb-3">
-                    <div className="flex flex-col">
-                      <span className="text-slate-500">Envoyé</span>
-                      <span className="text-teal-300 font-semibold">{formatBytes(t.trafficSent)}</span>
-                    </div>
-                    <div className="flex flex-col">
-                      <span className="text-slate-500">Reçu</span>
-                      <span className="text-emerald-300 font-semibold">{formatBytes(t.trafficReceived)}</span>
-                    </div>
-                    <div className="flex flex-col">
-                      <span className="text-slate-500">Latence</span>
-                      <span className="text-amber-300 font-semibold flex items-center gap-1">
-                        <Activity className="w-3 h-3 text-amber-400" /> {t.latency || 15} ms
-                      </span>
-                    </div>
+                {tunnel.type !== "dynamic" && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-500 text-[11px]">Cible distante:</span>
+                    <span className="text-slate-300 truncate font-medium">
+                      {tunnel.remoteHost}:{tunnel.remotePort}
+                    </span>
                   </div>
                 )}
 
-                {/* Command generator box */}
-                <div className="relative mb-3.5 bg-slate-950 p-2 text-[11px] font-mono text-slate-400 rounded-md border border-slate-800/80 group">
-                  <div className="truncate pr-16 text-slate-300">{cmd}</div>
-                  <div className="absolute right-1 top-1 flex items-center gap-1">
-                    <button
-                      onClick={() => handleCopyCommand(t)}
-                      className="p-1 hover:bg-slate-800 text-slate-400 hover:text-slate-200 rounded transition-colors"
-                      title="Copier la commande SSH"
-                    >
-                      {copiedId === t.id ? (
-                        <Check className="w-3 h-3 text-emerald-400" />
-                      ) : (
-                        <Copy className="w-3 h-3" />
-                      )}
-                    </button>
-                  </div>
-                </div>
-
-                {/* Footer Controls */}
-                <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-800/40">
-                  <div className="flex items-center gap-1">
-                    <button
-                      onClick={() => handleRunDiagnostic(t)}
-                      title="Tester et diagnostiquer le tunnel"
-                      className="px-2 py-1 text-[11px] font-mono bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-slate-100 rounded transition-colors flex items-center gap-1"
-                    >
-                      <Wifi className="w-3.5 h-3.5 text-teal-400" /> Diagnostiquer
-                    </button>
-
-                    <button
-                      onClick={() => handleOpenEditModal(t)}
-                      className="p-1.5 text-slate-400 hover:text-slate-200 hover:bg-slate-800 rounded transition-colors"
-                      title="Modifier le tunnel"
-                    >
-                      <Edit2 className="w-3.5 h-3.5" />
-                    </button>
-
-                    <button
-                      onClick={() => handleDeleteTunnel(t.id)}
-                      className="p-1.5 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded transition-colors"
-                      title="Supprimer"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    {/* Simulator switch */}
-                    <button
-                      onClick={() => handleToggleStatus(t.id)}
-                      className={`px-2.5 py-1 rounded text-[11px] font-mono border transition-colors flex items-center gap-1 ${
-                        isActive
-                          ? "bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border-amber-500/20"
-                          : "bg-teal-500/10 hover:bg-teal-500/20 text-teal-300 border-teal-500/20"
-                      }`}
-                    >
-                      {isActive ? (
-                        <>
-                          <Square className="w-3 h-3 fill-amber-300" /> Stop (Sim)
-                        </>
-                      ) : (
-                        <>
-                          <Play className="w-3 h-3 fill-teal-300" /> Start (Sim)
-                        </>
-                      )}
-                    </button>
-
-                    {/* Launch SSH in active terminal */}
-                    <button
-                      onClick={() => handleLaunchInTerminal(t)}
-                      className="px-2.5 py-1 bg-teal-600 hover:bg-teal-500 text-slate-950 font-bold text-[11px] font-mono rounded flex items-center gap-1 shadow transition-all"
-                    >
-                      <Terminal className="w-3 h-3 stroke-[2.5]" /> Exécuter Terminal
-                    </button>
-                  </div>
+                {/* Keep-alive settings summary */}
+                <div className="pt-1 border-t border-slate-900 text-[10px] text-slate-500 flex items-center justify-between">
+                  <span>KeepAlive: {tunnel.serverAliveInterval || 60}s</span>
+                  <span>ExitOnFail: {tunnel.exitOnFailure ? "Oui" : "Non"}</span>
                 </div>
               </div>
-            );
-          })}
 
-          {filteredTunnels.length === 0 && (
-            <div className="p-8 text-center bg-slate-900/40 rounded-xl border border-dashed border-slate-800 text-slate-400">
-              <Zap className="w-8 h-8 mx-auto mb-2 text-slate-600" />
-              <p className="text-sm font-medium">Aucun tunnel SSH configuré</p>
-              <button
-                onClick={handleOpenCreateModal}
-                className="mt-3 px-3 py-1.5 bg-teal-600 hover:bg-teal-500 text-slate-950 font-bold text-xs rounded transition-colors"
-              >
-                Générer un premier tunnel
-              </button>
-            </div>
-          )}
-        </div>
+              {/* Real-time Bandwidth Sparkline Chart (Only shown if active) */}
+              {isTActive ? (
+                <div className="my-2.5 p-2 bg-slate-950/40 rounded-lg border border-slate-800/40 space-y-2">
+                  <div className="flex justify-between text-[10px] font-mono text-slate-400">
+                    <span className="flex items-center gap-1">
+                      <Wifi className="w-3 h-3 text-emerald-400" />
+                      Tx: {formatBytes(tunnel.trafficSent)}
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <RefreshCw className="w-3 h-3 text-blue-400 animate-spin" />
+                      Rx: {formatBytes(tunnel.trafficReceived)}
+                    </span>
+                    <span>{tunnel.latency || 22}ms</span>
+                  </div>
 
-        {/* Right 1 Column: Diagnostic and Logs Console */}
-        <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 flex flex-col h-[520px]">
-          <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-            <h3 className="font-bold text-sm text-slate-100 flex items-center gap-2">
-              <Activity className="w-4 h-4 text-teal-400 animate-pulse" />
-              Console de Diagnostic
-            </h3>
-            {isDiagnosing && (
-              <RefreshCw className="w-3.5 h-3.5 text-teal-400 animate-spin" />
-            )}
-          </div>
-
-          <div className="flex-1 mt-3 bg-slate-950/80 p-3 rounded-lg border border-slate-800/80 overflow-y-auto custom-scrollbar font-mono text-[11px] space-y-2 select-text">
-            {diagnosticTunnelId ? (
-              <>
-                <div className="text-slate-500 pb-1 border-b border-slate-900 mb-2">
-                  $ ssh-tunnel-diagnostics --id={diagnosticTunnelId}
+                  {/* Sparkline Drawing */}
+                  <div className="h-6 w-full mt-1.5">
+                    <svg className="w-full h-full" viewBox="0 0 120 20" preserveAspectRatio="none">
+                      <path
+                        d={`M ${hist.map((val, i) => `${(i * 120) / 11} ${Math.max(2, 20 - (val / 100) * 18)}`).join(" L ")}`}
+                        fill="none"
+                        stroke="#10b981"
+                        strokeWidth="1.5"
+                        strokeLinecap="round"
+                      />
+                    </svg>
+                  </div>
                 </div>
-                {diagnosticLogs.map((log, idx) => {
-                  let textClass = "text-slate-300";
-                  if (log.includes("[ERREUR]")) textClass = "text-red-400 font-bold";
-                  if (log.includes("[SUCCESS]")) textClass = "text-emerald-400 font-bold";
-                  if (log.includes("[INFO]")) textClass = "text-slate-400";
-                  return (
-                    <div key={idx} className={textClass}>
+              ) : (
+                <div className="my-2 p-1 text-center font-mono text-[10px] text-slate-600 italic">
+                  Activer le tunnel pour démarrer le monitoring d'échange de bande passante.
+                </div>
+              )}
+
+              {/* Action buttons */}
+              <div className="pt-3 border-t border-slate-800/80 flex items-center justify-between gap-1.5 mt-2.5">
+                <div className="flex items-center gap-1 shrink-0">
+                  <button
+                    onClick={() => handleCopyCommand(tunnel)}
+                    title="Copier la commande SSH brute"
+                    className="p-1.5 text-slate-400 hover:text-slate-200 hover:bg-slate-800 rounded transition-colors"
+                  >
+                    {copiedId === tunnel.id ? (
+                      <Check className="w-3.5 h-3.5 text-emerald-400" />
+                    ) : (
+                      <Copy className="w-3.5 h-3.5" />
+                    )}
+                  </button>
+
+                  <button
+                    onClick={() => handleRunDiagnostic(tunnel)}
+                    title="Lancer le diagnostic réseau"
+                    className="p-1.5 text-slate-400 hover:text-indigo-400 hover:bg-indigo-500/10 rounded transition-colors"
+                  >
+                    <Activity className="w-3.5 h-3.5" />
+                  </button>
+
+                  <button
+                    onClick={() => handleOpenEditModal(tunnel)}
+                    title="Éditer le tunnel"
+                    className="p-1.5 text-slate-400 hover:text-slate-200 hover:bg-slate-800 rounded transition-colors"
+                  >
+                    <Edit2 className="w-3.5 h-3.5" />
+                  </button>
+
+                  <button
+                    onClick={() => handleDeleteTunnel(tunnel.id)}
+                    title="Supprimer"
+                    className="p-1.5 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded transition-colors"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+
+                {/* Launch / Stop button */}
+                {isTActive ? (
+                  <button
+                    onClick={() => handleToggleTunnelStatus(tunnel.id)}
+                    className="px-2.5 py-1.5 bg-red-500/15 border border-red-500/30 hover:bg-red-500/25 text-red-400 text-xs font-mono font-bold rounded-lg flex items-center gap-1 transition-colors"
+                  >
+                    <Square className="w-3 h-3 fill-current" /> Fermer
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => handleExecuteCommand(tunnel)}
+                    className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-750 text-emerald-400 text-xs font-mono font-bold rounded-lg border border-slate-700 flex items-center gap-1 transition-colors"
+                  >
+                    <Play className="w-3 h-3 fill-current text-emerald-400" /> Exécuter Terminal
+                  </button>
+                )}
+              </div>
+            </div>
+          );
+        })}
+
+        {filteredTunnels.length === 0 && (
+          <div className="col-span-full p-8 text-center bg-slate-900/40 border border-dashed border-slate-800 rounded-xl text-slate-400">
+            <Zap className="w-8 h-8 mx-auto mb-2 text-slate-600" />
+            <p className="text-sm font-medium">Aucun tunnel SSH ne correspond.</p>
+          </div>
+        )}
+      </div>
+
+      {/* Interactive Diagnostic Console and Port Conflict Panel side by side */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 shrink-0 mt-2">
+        {/* Diagnostic Panel */}
+        <div className="p-4 bg-slate-900 border border-slate-800 rounded-xl flex flex-col justify-between">
+          <div>
+            <h4 className="text-xs font-mono uppercase tracking-wider text-slate-300 font-bold flex items-center gap-1.5 mb-2">
+              <Activity className="w-4 h-4 text-emerald-400 animate-pulse" />
+              Console de Diagnostic & Analyse Réseau
+            </h4>
+            <div className="bg-slate-950 p-3 rounded-lg border border-slate-800 font-mono text-[11px] text-slate-300 h-36 overflow-y-auto space-y-1">
+              {diagnosticTunnelId ? (
+                <>
+                  {diagnosticLogs.map((log, idx) => (
+                    <div key={idx} className={
+                      log.includes("[SUCCESS]") ? "text-emerald-400 font-semibold" :
+                      log.includes("[DIAG]") ? "text-indigo-400" :
+                      "text-slate-300"
+                    }>
                       {log}
                     </div>
-                  );
-                })}
-                {isDiagnosing && (
-                  <div className="text-teal-400 animate-pulse">
-                    En cours d'analyse... [■■■■■■□□□]
-                  </div>
-                )}
-              </>
-            ) : (
-              <div className="h-full flex flex-col items-center justify-center text-center text-slate-500 px-4 py-8">
-                <Wifi className="w-8 h-8 mb-2 text-slate-700" />
-                <p className="text-xs">
-                  Sélectionnez un tunnel et cliquez sur <strong>"Diagnostiquer"</strong> pour lancer le test d'accessibilité réseau, de routage de port, de validation DNS et d'état du proxy relais.
-                </p>
-              </div>
-            )}
+                  ))}
+                  {isDiagnosing && (
+                    <div className="text-slate-500 animate-pulse">Test de poignée de main TCP en cours...</div>
+                  )}
+                </>
+              ) : (
+                <div className="text-slate-600 italic text-center pt-8">
+                  Cliquez sur l'icône d'activité d'un tunnel ci-dessus pour lancer un diagnostic de connectivité.
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Port Checker Panel */}
+        <div className="p-4 bg-slate-900 border border-slate-800 rounded-xl">
+          <h4 className="text-xs font-mono uppercase tracking-wider text-slate-300 font-bold flex items-center gap-1.5 mb-2">
+            <Monitor className="w-4 h-4 text-blue-400" />
+            Détecteur de Conflit de Ports Locaux
+          </h4>
+          <p className="text-[11px] text-slate-400 mb-2">
+            Vérifiez si un port d'écoute est déjà occupé par un autre processus local avant d'initier le tunnel SSH.
+          </p>
+
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={checkPortInput}
+              onChange={(e) => setCheckPortInput(e.target.value)}
+              placeholder="3306, 8080, 5432..."
+              className="bg-slate-950 border border-slate-800 rounded px-3 py-1.5 text-xs text-slate-200 font-mono w-28 focus:outline-none focus:border-blue-500"
+            />
+            <button
+              onClick={handlePortCheck}
+              className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-slate-950 font-mono font-bold text-xs rounded-lg transition-colors"
+            >
+              Tester le Port
+            </button>
           </div>
 
-          {diagnosticTunnelId && !isDiagnosing && (
-            <div className="pt-3 border-t border-slate-800 flex justify-between items-center text-[11px]">
-              <span className="text-slate-400">Diagnostic terminé</span>
-              <button
-                onClick={() => {
-                  const t = tunnels.find((item) => item.id === diagnosticTunnelId);
-                  if (t) handleRunDiagnostic(t);
-                }}
-                className="text-teal-400 hover:text-teal-300 font-mono font-bold hover:underline"
-              >
-                Relancer le test
-              </button>
+          {portCheckResult && (
+            <div className="mt-3 p-3 rounded-lg border text-xs font-mono space-y-1.5 bg-slate-950 border-slate-800">
+              <div className="flex items-center gap-1.5">
+                {portCheckResult.status === "free" ? (
+                  <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" />
+                ) : (
+                  <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
+                )}
+                <span className={portCheckResult.status === "free" ? "text-emerald-300 font-bold" : "text-amber-300 font-bold"}>
+                  {portCheckResult.message}
+                </span>
+              </div>
+              {portCheckResult.suggestions.length > 0 && (
+                <div className="space-y-1 pl-5 text-slate-400 text-[10px] list-decimal">
+                  {portCheckResult.suggestions.map((s, idx) => (
+                    <div key={idx}>• {s}</div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>
       </div>
 
-      {/* Modal form create/edit */}
+      {/* Create / Edit Modal Form */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-slate-900 border border-slate-800 rounded-xl w-full max-w-lg shadow-2xl overflow-hidden my-8">
-            <div className="p-4 border-b border-slate-800 flex items-center justify-between bg-slate-950/40">
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-xl w-full max-w-md shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
+            <div className="p-4 border-b border-slate-800 flex items-center justify-between bg-slate-950/40 shrink-0">
               <h3 className="font-bold text-slate-100 text-sm flex items-center gap-2">
-                <Zap className="w-4 h-4 text-teal-400" />
+                <Workflow className="w-4 h-4 text-emerald-400" />
                 {editingTunnel ? "Éditer le Tunnel SSH" : "Nouveau Tunnel SSH / Port Forwarding"}
               </h3>
-              <button
-                onClick={() => setIsModalOpen(false)}
-                className="text-slate-400 hover:text-slate-200 text-sm"
-              >
-                ✕
-              </button>
+              <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-200">✕</button>
             </div>
 
-            <form onSubmit={handleSaveTunnel} className="p-5 space-y-4">
-              {/* Friendly Name */}
+            <form onSubmit={handleSaveTunnel} className="p-6 space-y-4 text-xs font-mono overflow-y-auto custom-scrollbar flex-1">
               <div>
-                <label className="block text-xs font-mono text-slate-300 mb-1">Nom descriptif du Tunnel</label>
+                <label className="block text-slate-400 mb-1">Nom du Tunnel</label>
                 <input
                   type="text"
-                  required
                   value={formName}
                   onChange={(e) => setFormName(e.target.value)}
-                  placeholder="ex: Redirection PostgreSQL Production"
-                  className="w-full bg-slate-950 border border-slate-800 rounded px-3 py-1.5 text-xs text-slate-100 font-mono focus:outline-none focus:border-teal-500"
+                  placeholder="Ex: Redirection PostgreSQL"
+                  className="w-full bg-slate-950 border border-slate-800 rounded px-3 py-2 text-slate-100 focus:outline-none focus:border-emerald-500"
+                  required
                 />
               </div>
 
-              {/* SSH Host Link selector */}
               <div>
-                <label className="block text-xs font-mono text-slate-300 mb-1">Serveur SSH Relais Associé</label>
+                <label className="block text-slate-400 mb-1">Serveur d'Appui SSH (Hôte)</label>
                 <select
-                  required
                   value={formHostId}
                   onChange={(e) => setFormHostId(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded px-3 py-1.5 text-xs text-slate-100 font-mono focus:outline-none focus:border-teal-500"
+                  className="w-full bg-slate-950 border border-slate-800 rounded px-3 py-2 text-slate-100 focus:outline-none focus:border-emerald-500"
+                  required
                 >
-                  <option value="" disabled>-- Choisir un serveur SSH enregistré --</option>
                   {hosts.map((h) => (
-                    <option key={h.id} value={h.id}>
-                      {h.name} ({h.username}@{h.host})
-                    </option>
+                    <option key={h.id} value={h.id}>{h.name} ({h.host})</option>
                   ))}
+                  {hosts.length === 0 && <option value="">Aucun hôte configuré</option>}
                 </select>
-                {hosts.length === 0 && (
-                  <p className="text-[11px] text-red-400 mt-1">
-                    Veuillez d'abord enregistrer un serveur SSH dans le Carnet SSH pour l'associer.
-                  </p>
-                )}
               </div>
 
-              {/* Forwarding Type Selector */}
               <div>
-                <label className="block text-xs font-mono text-slate-300 mb-1">Type de Redirection</label>
+                <label className="block text-slate-400 mb-1">Type de Redirection (Forwarding Type)</label>
                 <div className="grid grid-cols-3 gap-2">
-                  {[
-                    { id: "local", label: "Local (-L)", desc: "Port Local -> Cible Distante" },
-                    { id: "remote", label: "Remote (-R)", desc: "Reverse Proxy : Distant -> Local" },
-                    { id: "dynamic", label: "SOCKS (-D)", desc: "Proxy dynamique local" }
-                  ].map((typeItem) => (
-                    <button
-                      key={typeItem.id}
-                      type="button"
-                      onClick={() => {
-                        setFormType(typeItem.id as any);
-                        if (typeItem.id === "dynamic") {
-                          setFormRemoteHost("127.0.0.1");
-                          setFormRemotePort(0);
-                        }
-                      }}
-                      className={`px-2 py-2 rounded text-xs font-mono border text-center transition-colors flex flex-col justify-between h-14 ${
-                        formType === typeItem.id
-                          ? "bg-teal-500/20 text-teal-300 border-teal-500/40"
-                          : "bg-slate-950 text-slate-400 border-slate-800"
-                      }`}
-                    >
-                      <span className="font-bold block text-[11px]">{typeItem.label}</span>
-                      <span className="text-[9px] text-slate-500 block leading-tight">{typeItem.desc}</span>
-                    </button>
-                  ))}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFormType("local");
+                      if (formLocalPort === 0) setFormLocalPort(8080);
+                    }}
+                    className={`py-1.5 px-2 border rounded text-center text-[10px] font-bold ${
+                      formType === "local" ? "bg-blue-500/10 border-blue-500/30 text-blue-300" : "bg-slate-950 border-slate-800 text-slate-400"
+                    }`}
+                  >
+                    Local (-L)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFormType("remote");
+                      if (formLocalPort === 0) setFormLocalPort(8080);
+                    }}
+                    className={`py-1.5 px-2 border rounded text-center text-[10px] font-bold ${
+                      formType === "remote" ? "bg-purple-500/10 border-purple-500/30 text-purple-300" : "bg-slate-950 border-slate-800 text-slate-400"
+                    }`}
+                  >
+                    Distant (-R)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFormType("dynamic");
+                      setFormLocalPort(1080);
+                    }}
+                    className={`py-1.5 px-2 border rounded text-center text-[10px] font-bold ${
+                      formType === "dynamic" ? "bg-amber-500/10 border-amber-500/30 text-amber-300" : "bg-slate-950 border-slate-800 text-slate-400"
+                    }`}
+                  >
+                    SOCKS (-D)
+                  </button>
                 </div>
               </div>
 
-              {/* Port configurations */}
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-mono text-slate-300 mb-1">Port Local</label>
+                  <label className="block text-slate-400 mb-1">Port Local d'Écoute</label>
                   <input
                     type="number"
-                    required
                     value={formLocalPort}
                     onChange={(e) => setFormLocalPort(Number(e.target.value))}
-                    className="w-full bg-slate-950 border border-slate-800 rounded px-3 py-1.5 text-xs text-slate-100 font-mono focus:outline-none focus:border-teal-500"
+                    className="w-full bg-slate-950 border border-slate-800 rounded px-3 py-2 text-slate-100 focus:outline-none focus:border-emerald-500"
+                    required
                   />
                 </div>
 
                 {formType !== "dynamic" && (
-                  <>
-                    <div>
-                      <label className="block text-xs font-mono text-slate-300 mb-1">Hôte Distant</label>
-                      <input
-                        type="text"
-                        required
-                        value={formRemoteHost}
-                        onChange={(e) => setFormRemoteHost(e.target.value)}
-                        placeholder="localhost, db.internal"
-                        className="w-full bg-slate-950 border border-slate-800 rounded px-3 py-1.5 text-xs text-slate-100 font-mono focus:outline-none focus:border-teal-500"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-mono text-slate-300 mb-1">Port Distant</label>
-                      <input
-                        type="number"
-                        required
-                        value={formRemotePort}
-                        onChange={(e) => setFormRemotePort(Number(e.target.value))}
-                        className="w-full bg-slate-950 border border-slate-800 rounded px-3 py-1.5 text-xs text-slate-100 font-mono focus:outline-none focus:border-teal-500"
-                      />
-                    </div>
-                  </>
+                  <div>
+                    <label className="block text-slate-400 mb-1">Port Distant Cible</label>
+                    <input
+                      type="number"
+                      value={formRemotePort}
+                      onChange={(e) => setFormRemotePort(Number(e.target.value))}
+                      className="w-full bg-slate-950 border border-slate-800 rounded px-3 py-2 text-slate-100 focus:outline-none focus:border-emerald-500"
+                      required
+                    />
+                  </div>
                 )}
               </div>
 
-              {/* Command preview */}
-              <div className="p-2.5 bg-slate-950 border border-slate-800/80 rounded font-mono text-[10px] text-slate-400 space-y-1">
-                <span className="text-slate-500 block">Commande SSH générée :</span>
-                <span className="text-teal-400 block break-all">
-                  {generateTunnelCommand({
-                    id: "temp",
-                    name: formName,
-                    hostId: formHostId,
-                    type: formType,
-                    localPort: Number(formLocalPort),
-                    remoteHost: formType === "dynamic" ? "127.0.0.1" : formRemoteHost,
-                    remotePort: formType === "dynamic" ? 0 : Number(formRemotePort),
-                    status: "inactive",
-                    createdAt: Date.now(),
-                  })}
-                </span>
+              {formType !== "dynamic" && (
+                <div>
+                  <label className="block text-slate-400 mb-1">Hôte Distant Cible (Remote Host)</label>
+                  <input
+                    type="text"
+                    value={formRemoteHost}
+                    onChange={(e) => setFormRemoteHost(e.target.value)}
+                    placeholder="localhost ou 127.0.0.1"
+                    className="w-full bg-slate-950 border border-slate-800 rounded px-3 py-2 text-slate-100 focus:outline-none focus:border-emerald-500"
+                    required
+                  />
+                </div>
+              )}
+
+              {/* Keep-Alive details */}
+              <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-800/60">
+                <div>
+                  <label className="block text-slate-400 mb-1" title="Envoi périodique de requêtes nulles pour maintenir actif le pont réseau">
+                    Intervalle Keep-Alive
+                  </label>
+                  <select
+                    value={formAliveInterval}
+                    onChange={(e) => setFormAliveInterval(Number(e.target.value))}
+                    className="w-full bg-slate-950 border border-slate-800 rounded px-3 py-2 text-slate-100 focus:outline-none focus:border-emerald-500"
+                  >
+                    <option value={15}>15 secondes</option>
+                    <option value={30}>30 secondes</option>
+                    <option value={60}>60 secondes</option>
+                    <option value={120}>120 secondes</option>
+                  </select>
+                </div>
+
+                <div className="flex flex-col justify-end pb-2">
+                  <label className="flex items-center gap-2 cursor-pointer text-slate-300">
+                    <input
+                      type="checkbox"
+                      checked={formExitOnFailure}
+                      onChange={(e) => setFormExitOnFailure(e.target.checked)}
+                      className="rounded border-slate-800 bg-slate-950 text-emerald-500 w-4 h-4 focus:ring-0 focus:outline-none"
+                    />
+                    <span title="Fermer le sous-processus de tunnelisation en cas de liaison impossible ou déjà lié">
+                      Fermer si échec
+                    </span>
+                  </label>
+                </div>
               </div>
 
-              {/* Action buttons */}
-              <div className="pt-3 border-t border-slate-800 flex justify-end gap-2">
+              <div className="pt-4 border-t border-slate-800 flex justify-end gap-3 shrink-0">
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-mono rounded"
+                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg"
                 >
                   Annuler
                 </button>
                 <button
                   type="submit"
-                  disabled={hosts.length === 0}
-                  className="px-4 py-2 bg-teal-600 hover:bg-teal-500 text-slate-950 font-bold text-xs font-mono rounded disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-bold rounded-lg shadow"
                 >
-                  Enregistrer le Tunnel
+                  Enregistrer
                 </button>
               </div>
             </form>

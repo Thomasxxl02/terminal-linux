@@ -5,6 +5,7 @@ import { TerminalView } from "./components/TerminalView";
 import { MaintenanceHub } from "./components/MaintenanceHub";
 import { TauriRustArchitect } from "./components/TauriRustArchitect";
 import { SnippetsLibrary } from "./components/SnippetsLibrary";
+import { SkillsHub } from "./components/SkillsHub";
 import { SystemMonitorModal } from "./components/SystemMonitorModal";
 import { CommandPalette } from "./components/CommandPalette";
 import { ProfileManager } from "./components/ProfileManager";
@@ -142,51 +143,6 @@ export default function App() {
     }
   }, []);
 
-  // Launch terminal session with custom profile
-  const handleLaunchProfile = useCallback(async (profile: ShellProfile) => {
-    try {
-      const res = await fetch("/api/pty/create", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: profile.name,
-          cwd: profile.cwd,
-          shell: profile.shell,
-          env: profile.env,
-        }),
-      });
-      const newSess = await res.json();
-      setSessions((prev) => [...prev, newSess]);
-      setActiveSessionId(newSess.id);
-      setActiveView("terminal");
-    } catch (err) {
-      console.error("Failed to launch profile session:", err);
-    }
-  }, []);
-
-  // Restore saved tab sessions
-  const handleRestoreSavedTabs = useCallback(async (savedTabs: SavedTabSession[]) => {
-    for (const tab of savedTabs) {
-      try {
-        const res = await fetch("/api/pty/create", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            name: tab.name,
-            cwd: tab.cwd,
-            shell: tab.shell,
-          }),
-        });
-        const newSess = await res.json();
-        setSessions((prev) => [...prev.filter((s) => s.id !== newSess.id), newSess]);
-        setActiveSessionId(newSess.id);
-      } catch (e) {
-        console.error("Failed to restore tab session:", e);
-      }
-    }
-    setActiveView("terminal");
-  }, []);
-
   // Execute Command in active terminal
   const handleExecuteInTerminal = useCallback(async (command: string, specificSessionId?: string) => {
     let targetId = specificSessionId || activeSessionId;
@@ -212,6 +168,57 @@ export default function App() {
       body: JSON.stringify({ data: cmdWithNewline }),
     }).catch(() => {});
   }, [activeSessionId, sessions]);
+
+  // Launch terminal session with custom profile
+  const handleLaunchProfile = useCallback(async (profile: ShellProfile) => {
+    try {
+      const res = await fetch("/api/pty/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: profile.name,
+          cwd: profile.cwd,
+          shell: profile.shell,
+          env: profile.env,
+        }),
+      });
+      const newSess = await res.json();
+      setSessions((prev) => [...prev, newSess]);
+      setActiveSessionId(newSess.id);
+      setActiveView("terminal");
+
+      if (profile.startupScript) {
+        setTimeout(() => {
+          handleExecuteInTerminal(profile.startupScript!, newSess.id);
+        }, 800);
+      }
+    } catch (err) {
+      console.error("Failed to launch profile session:", err);
+    }
+  }, [handleExecuteInTerminal]);
+
+  // Restore saved tab sessions
+  const handleRestoreSavedTabs = useCallback(async (savedTabs: SavedTabSession[]) => {
+    for (const tab of savedTabs) {
+      try {
+        const res = await fetch("/api/pty/create", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: tab.name,
+            cwd: tab.cwd,
+            shell: tab.shell,
+          }),
+        });
+        const newSess = await res.json();
+        setSessions((prev) => [...prev.filter((s) => s.id !== newSess.id), newSess]);
+        setActiveSessionId(newSess.id);
+      } catch (e) {
+        console.error("Failed to restore tab session:", e);
+      }
+    }
+    setActiveView("terminal");
+  }, []);
 
   // Launch SSH Session in new PTY tab
   const handleLaunchSshSession = useCallback(async (host: SshHost) => {
@@ -450,6 +457,10 @@ export default function App() {
         )}
 
         {activeView === "tauri" && <TauriRustArchitect />}
+
+        {activeView === "skills" && (
+          <SkillsHub onExecuteInTerminal={handleExecuteInTerminal} />
+        )}
 
         {activeView === "snippets" && (
           <SnippetsLibrary onExecuteInTerminal={handleExecuteInTerminal} />

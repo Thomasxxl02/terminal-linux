@@ -17,7 +17,8 @@ import {
   Bell,
   Sliders,
   Layers,
-  Key
+  Key,
+  Sparkles
 } from "lucide-react";
 import { TerminalSessionInfo, MaintenanceTask, TerminalTheme } from "../types";
 import { MAINTENANCE_TASKS } from "../constants/snippets";
@@ -166,6 +167,17 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
       icon: Bookmark,
       action: () => {
         setActiveView("snippets");
+        onClose();
+      },
+    },
+    {
+      id: "nav-skills",
+      title: "Skills / Fonctions d'Automatisation",
+      category: "Nav",
+      description: "Macros compilées et créateur de compétences dynamiques",
+      icon: Sparkles,
+      action: () => {
+        setActiveView("skills");
         onClose();
       },
     },

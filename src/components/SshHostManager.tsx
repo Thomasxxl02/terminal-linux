@@ -17,7 +17,12 @@ import {
   Layers,
   Search,
   ExternalLink,
-  ChevronRight
+  ChevronRight,
+  Download,
+  Upload,
+  ShieldAlert,
+  ShieldCheck,
+  Code
 } from "lucide-react";
 import { SshHost, TerminalSessionInfo } from "../types";
 import { useLocalStorage } from "../hooks/useLocalStorage";
@@ -35,6 +40,11 @@ const DEFAULT_SSH_HOSTS: SshHost[] = [
     color: "#10b981",
     description: "Serveur d'application principal avec docker & Nginx",
     tunnels: ["8080:localhost:80", "3306:localhost:3306"],
+    quickCommands: [
+      { id: "qc1", name: "Status Docker", cmd: "docker ps" },
+      { id: "qc2", name: "Uptime & CPU", cmd: "uptime && top -b -n 1 | head -n 12" },
+      { id: "qc3", name: "Usage Disque", cmd: "df -h" }
+    ]
   },
   {
     id: "ssh-vps-staging",
@@ -48,6 +58,10 @@ const DEFAULT_SSH_HOSTS: SshHost[] = [
     color: "#3b82f6",
     description: "Environnement de recette & pré-production",
     tunnels: [],
+    quickCommands: [
+      { id: "qc4", name: "Logs Nginx", cmd: "tail -n 20 /var/log/nginx/access.log" },
+      { id: "qc5", name: "Redémarrer services", cmd: "sudo systemctl reload nginx" }
+    ]
   },
   {
     id: "ssh-rpi-home",
@@ -60,6 +74,9 @@ const DEFAULT_SSH_HOSTS: SshHost[] = [
     color: "#f59e0b",
     description: "Nœud de monitoring local & passerelle IoT",
     tunnels: ["9090:localhost:9090"],
+    quickCommands: [
+      { id: "qc6", name: "Température CPU", cmd: "vcgencmd measure_temp" }
+    ]
   },
   {
     id: "ssh-db-tunnel",
@@ -73,6 +90,9 @@ const DEFAULT_SSH_HOSTS: SshHost[] = [
     color: "#8b5cf6",
     description: "Tunnel sécurisé vers l'instance Postgres privée",
     tunnels: ["5432:10.0.0.12:5432"],
+    quickCommands: [
+      { id: "qc7", name: "Postgres Actives", cmd: "psql -U postgres -c 'SELECT count(*) FROM pg_stat_activity;'" }
+    ]
   },
 ];
 
@@ -98,6 +118,14 @@ export const SshHostManager: React.FC<SshHostManagerProps> = ({
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
+  // Bulk Import / Export States
+  const [isBulkOpen, setIsBulkOpen] = useState(false);
+  const [bulkInput, setBulkInput] = useState("");
+  const [bulkError, setBulkError] = useState<string | null>(null);
+
+  // Security Audit Pane State
+  const [showSecurityAudit, setShowSecurityAudit] = useState(false);
+
   // Form State
   const [formName, setFormName] = useState("");
   const [formHost, setFormHost] = useState("");
@@ -110,6 +138,11 @@ export const SshHostManager: React.FC<SshHostManagerProps> = ({
   const [formDescription, setFormDescription] = useState("");
   const [formTunnels, setFormTunnels] = useState<string[]>([]);
   const [tunnelInput, setTunnelInput] = useState("");
+
+  // Quick commands editing inside form
+  const [formQuickCmds, setFormQuickCmds] = useState<{ id: string; name: string; cmd: string }[]>([]);
+  const [qcNameInput, setQcNameInput] = useState("");
+  const [qcCmdInput, setQcCmdInput] = useState("");
 
   const categories = ["all", ...Array.from(new Set(hosts.map((h) => h.category || "Général")))];
 
@@ -151,6 +184,9 @@ export const SshHostManager: React.FC<SshHostManagerProps> = ({
     setFormColor("#10b981");
     setFormDescription("");
     setFormTunnels([]);
+    setFormQuickCmds([]);
+    setQcNameInput("");
+    setQcCmdInput("");
     setIsModalOpen(true);
   };
 
@@ -162,10 +198,13 @@ export const SshHostManager: React.FC<SshHostManagerProps> = ({
     setFormUsername(h.username);
     setFormAuthType(h.authType);
     setFormKeyPath(h.privateKeyPath || "~/.ssh/id_rsa");
-    setFormCategory(h.category || "Général");
+    setFormCategory(h.category || "Production");
     setFormColor(h.color || "#10b981");
     setFormDescription(h.description || "");
     setFormTunnels(h.tunnels || []);
+    setFormQuickCmds(h.quickCommands || []);
+    setQcNameInput("");
+    setQcCmdInput("");
     setIsModalOpen(true);
   };
 
@@ -173,56 +212,32 @@ export const SshHostManager: React.FC<SshHostManagerProps> = ({
     e.preventDefault();
     if (!formName || !formHost || !formUsername) return;
 
+    const hostData: SshHost = {
+      id: editingHost ? editingHost.id : `ssh_${Date.now()}`,
+      name: formName,
+      host: formHost,
+      port: Number(formPort),
+      username: formUsername,
+      authType: formAuthType,
+      privateKeyPath: formAuthType === "key" ? formKeyPath : undefined,
+      category: formCategory,
+      color: formColor,
+      description: formDescription,
+      tunnels: formTunnels,
+      quickCommands: formQuickCmds
+    };
+
     if (editingHost) {
-      const updated = hosts.map((h) =>
-        h.id === editingHost.id
-          ? {
-              ...h,
-              name: formName,
-              host: formHost,
-              port: Number(formPort),
-              username: formUsername,
-              authType: formAuthType,
-              privateKeyPath: formAuthType === "key" ? formKeyPath : undefined,
-              category: formCategory,
-              color: formColor,
-              description: formDescription,
-              tunnels: formTunnels,
-            }
-          : h
-      );
-      setHosts(updated);
+      setHosts(hosts.map((h) => (h.id === editingHost.id ? hostData : h)));
     } else {
-      const newHost: SshHost = {
-        id: `ssh_${Date.now()}`,
-        name: formName,
-        host: formHost,
-        port: Number(formPort),
-        username: formUsername,
-        authType: formAuthType,
-        privateKeyPath: formAuthType === "key" ? formKeyPath : undefined,
-        category: formCategory,
-        color: formColor,
-        description: formDescription,
-        tunnels: formTunnels,
-      };
-      setHosts([...hosts, newHost]);
+      setHosts([...hosts, hostData]);
     }
+
     setIsModalOpen(false);
   };
 
   const handleDeleteHost = (id: string) => {
     setHosts(hosts.filter((h) => h.id !== id));
-  };
-
-  const handleAddTunnel = () => {
-    if (!tunnelInput.trim()) return;
-    setFormTunnels([...formTunnels, tunnelInput.trim()]);
-    setTunnelInput("");
-  };
-
-  const handleRemoveTunnel = (index: number) => {
-    setFormTunnels(formTunnels.filter((_, i) => i !== index));
   };
 
   const handleCopyCommand = (h: SshHost) => {
@@ -233,18 +248,99 @@ export const SshHostManager: React.FC<SshHostManagerProps> = ({
   };
 
   const handlePingTest = (h: SshHost) => {
-    const cmd = `echo "[SSH MANAGER] Test de connectivité vers ${h.host}..." && ping -c 3 ${h.host}`;
-    onExecuteInTerminal(cmd, activeSessionId || undefined);
+    onExecuteInTerminal(`ping -c 3 ${h.host}`);
+  };
+
+  // Add tunnel to form
+  const handleAddTunnel = () => {
+    if (tunnelInput.trim() && !formTunnels.includes(tunnelInput.trim())) {
+      setFormTunnels([...formTunnels, tunnelInput.trim()]);
+      setTunnelInput("");
+    }
+  };
+
+  const handleRemoveTunnel = (t: string) => {
+    setFormTunnels(formTunnels.filter((item) => item !== t));
+  };
+
+  // Add quick command helper
+  const handleAddQuickCmd = () => {
+    if (qcNameInput.trim() && qcCmdInput.trim()) {
+      setFormQuickCmds([
+        ...formQuickCmds,
+        { id: `qc_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`, name: qcNameInput.trim(), cmd: qcCmdInput.trim() }
+      ]);
+      setQcNameInput("");
+      setQcCmdInput("");
+    }
+  };
+
+  const handleRemoveQuickCmd = (id: string) => {
+    setFormQuickCmds(formQuickCmds.filter((q) => q.id !== id));
+  };
+
+  // Run a quick command immediately
+  const handleRunQuickCommand = (host: SshHost, cmd: string) => {
+    // We launch SSH connection, wait brief interval, then execute the command!
+    onLaunchSshSession(host);
+    setTimeout(() => {
+      onExecuteInTerminal(cmd);
+    }, 1200);
+  };
+
+  // Export hosts list to clipboard
+  const handleExportHosts = () => {
+    const jsonStr = JSON.stringify(hosts, null, 2);
+    navigator.clipboard.writeText(jsonStr);
+    alert("Carnet d'hôtes exporté avec succès dans le presse-papiers !");
+  };
+
+  // Bulk Import logic
+  const handleImportHosts = () => {
+    try {
+      const parsed = JSON.parse(bulkInput);
+      if (Array.isArray(parsed)) {
+        // Validate minimally
+        const validated: SshHost[] = parsed.map((item: any, idx) => {
+          if (!item.name || !item.host || !item.username) {
+            throw new Error(`Élément #${idx + 1} invalide (requis: name, host, username)`);
+          }
+          return {
+            id: item.id || `ssh_imported_${Date.now()}_${idx}`,
+            name: item.name,
+            host: item.host,
+            port: Number(item.port) || 22,
+            username: item.username,
+            authType: item.authType === "password" ? "password" : "key",
+            privateKeyPath: item.privateKeyPath,
+            category: item.category || "Importé",
+            color: item.color || "#3b82f6",
+            description: item.description || "",
+            tunnels: Array.isArray(item.tunnels) ? item.tunnels : [],
+            quickCommands: Array.isArray(item.quickCommands) ? item.quickCommands : []
+          };
+        });
+
+        setHosts([...hosts, ...validated]);
+        setBulkInput("");
+        setBulkError(null);
+        setIsBulkOpen(false);
+      } else {
+        setBulkError("Le contenu importé doit être un tableau JSON valide.");
+      }
+    } catch (err: any) {
+      setBulkError(err.message || "Erreur de syntaxe JSON.");
+    }
   };
 
   return (
-    <div className="flex-1 flex flex-col h-full bg-slate-950 text-slate-100 overflow-y-auto custom-scrollbar p-6">
-      {/* Header Banner */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 pb-5 border-b border-slate-800">
+    <div className="flex-1 bg-slate-950 text-slate-100 p-6 overflow-y-auto custom-scrollbar">
+      {/* Header and Actions */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 pb-6 border-b border-slate-900">
         <div>
           <div className="flex items-center gap-2 mb-1">
-            <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
-              <Key className="w-4 h-4" />
+            <div className="p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400">
+              <Server className="w-5 h-5" />
             </div>
             <h2 className="text-lg font-bold text-slate-100 tracking-tight">
               Carnet de Connexions SSH & Tunnels Distants
@@ -255,13 +351,158 @@ export const SshHostManager: React.FC<SshHostManagerProps> = ({
           </p>
         </div>
 
-        <button
-          onClick={handleOpenCreateModal}
-          className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-bold text-xs font-mono rounded-lg shadow-md flex items-center gap-2 transition-all self-start md:self-auto"
-        >
-          <Plus className="w-4 h-4 stroke-[3]" /> Ajouter un Hôte SSH
-        </button>
+        <div className="flex items-center gap-2 self-start md:self-auto">
+          {/* Security Suite toggle button */}
+          <button
+            onClick={() => setShowSecurityAudit(!showSecurityAudit)}
+            className={`px-3 py-2 text-xs font-mono rounded-lg border flex items-center gap-1.5 transition-colors ${
+              showSecurityAudit
+                ? "bg-amber-500/10 border-amber-500/30 text-amber-300"
+                : "bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200"
+            }`}
+          >
+            <ShieldAlert className="w-4 h-4" />
+            <span>Audit Sécurité</span>
+          </button>
+
+          {/* Bulk Export/Import Buttons */}
+          <button
+            onClick={() => {
+              setBulkInput("");
+              setBulkError(null);
+              setIsBulkOpen(true);
+            }}
+            className="px-3 py-2 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 text-xs font-mono rounded-lg flex items-center gap-1.5 transition-colors"
+          >
+            <Upload className="w-3.5 h-3.5" />
+            <span>Importer</span>
+          </button>
+
+          <button
+            onClick={handleExportHosts}
+            className="px-3 py-2 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 text-xs font-mono rounded-lg flex items-center gap-1.5 transition-colors"
+          >
+            <Download className="w-3.5 h-3.5" />
+            <span>Exporter</span>
+          </button>
+
+          <button
+            onClick={handleOpenCreateModal}
+            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-bold text-xs font-mono rounded-lg shadow-md flex items-center gap-2 transition-all"
+          >
+            <Plus className="w-4 h-4 stroke-[3]" /> Ajouter un Hôte SSH
+          </button>
+        </div>
       </div>
+
+      {/* Security Audit Pane */}
+      {showSecurityAudit && (
+        <div className="mb-6 p-4 bg-slate-900 border border-slate-800 rounded-xl space-y-3">
+          <h3 className="text-xs font-mono uppercase tracking-wider text-slate-200 font-bold flex items-center gap-1.5">
+            <Shield className="w-4 h-4 text-emerald-400" />
+            Audit de Sécurité des Clés & Ports SSH ({hosts.length} hôtes évalués)
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2 max-h-48 overflow-y-auto custom-scrollbar bg-slate-950 p-3 rounded-lg border border-slate-800 text-xs">
+              {hosts.map((h) => {
+                const issues: string[] = [];
+                if (h.port === 22) issues.push("Port standard 22 détecté (exposé aux attaques de force brute automatique). Recommandé: changer le port.");
+                if (h.authType === "password") issues.push("Authentification par mot de passe moins sûre que par clés asymétriques.");
+                if (h.authType === "key" && !h.privateKeyPath) issues.push("Clé privée requise mais aucun chemin de clé spécifié.");
+
+                return (
+                  <div key={h.id} className="p-2 border-b border-slate-900 last:border-0 flex items-start justify-between gap-3">
+                    <div>
+                      <span className="font-semibold text-slate-200">{h.name}</span>
+                      {issues.length > 0 ? (
+                        <div className="space-y-1 mt-1 text-[11px]">
+                          {issues.map((issue, idx) => (
+                            <span key={idx} className="block text-amber-400">⚠️ {issue}</span>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="block text-emerald-400 text-[11px] mt-0.5">✓ Aucune vulnérabilité triviale détectée !</span>
+                      )}
+                    </div>
+                    <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded-full uppercase shrink-0 ${
+                      issues.length > 1
+                        ? "bg-red-500/20 text-red-300 border border-red-500/30"
+                        : issues.length === 1
+                        ? "bg-amber-500/20 text-amber-300 border border-amber-500/30"
+                        : "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
+                    }`}>
+                      {issues.length > 1 ? "Risque Moyen" : issues.length === 1 ? "Attention" : "Sécurisé"}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="bg-slate-950 p-4 rounded-lg border border-slate-800 text-xs space-y-2 text-slate-300">
+              <h4 className="font-semibold text-slate-200 flex items-center gap-1">
+                <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                Conseils d'Administration SSH Recommandés
+              </h4>
+              <ul className="list-disc pl-4 space-y-1.5 text-slate-400">
+                <li>
+                  <strong className="text-slate-300">Permissions strictes :</strong> Protégez toujours votre clé privée sur votre machine locale via :
+                  <code className="block bg-slate-900 px-2 py-0.5 rounded text-amber-400 font-mono mt-1 text-[11px]">chmod 600 ~/.ssh/id_rsa</code>
+                </li>
+                <li>
+                  <strong className="text-slate-300">Déployer les clés de confiance :</strong> Utilisez <code className="text-emerald-400 font-mono">ssh-copy-id user@host</code> pour copier de manière sécurisée votre clé publique vers le serveur distant.
+                </li>
+                <li>
+                  <strong className="text-slate-300">Désactiver l'accès Root direct :</strong> Modifiez <code className="text-slate-200">/etc/ssh/sshd_config</code> pour configurer <code className="text-amber-400">PermitRootLogin no</code> pour bloquer l'accès super-utilisateur brut.
+                </li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Import Modal */}
+      {isBulkOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-xl w-full max-w-lg shadow-2xl p-6">
+            <h3 className="font-bold text-slate-100 text-sm mb-2 flex items-center gap-2">
+              <Upload className="w-4 h-4 text-emerald-400" />
+              Importer des hôtes au format JSON
+            </h3>
+            <p className="text-xs text-slate-400 mb-4 font-mono">
+              Collez un tableau d'objets hôtes SSH. Exemple d'attributs requis: "name", "host", "username".
+            </p>
+
+            <textarea
+              value={bulkInput}
+              onChange={(e) => setBulkInput(e.target.value)}
+              placeholder='[ { "name": "Mon Serveur", "host": "1.2.3.4", "username": "root" } ]'
+              rows={8}
+              className="w-full bg-slate-950 border border-slate-800 rounded p-3 text-xs text-slate-200 font-mono focus:outline-none focus:border-emerald-500"
+            />
+
+            {bulkError && (
+              <div className="text-red-400 text-xs font-mono mt-2 bg-red-500/10 p-2 rounded border border-red-500/20">
+                ⚠️ {bulkError}
+              </div>
+            )}
+
+            <div className="mt-4 flex items-center justify-end gap-3 border-t border-slate-800 pt-3">
+              <button
+                onClick={() => setIsBulkOpen(false)}
+                className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-mono rounded-lg"
+              >
+                Annuler
+              </button>
+              <button
+                onClick={handleImportHosts}
+                className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-bold text-xs font-mono rounded-lg shadow"
+              >
+                Lancer l'Importation
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Filter & Search Bar */}
       <div className="flex flex-col sm:flex-row items-center justify-between gap-3 mb-6">
@@ -360,14 +601,36 @@ export const SshHostManager: React.FC<SshHostManagerProps> = ({
                 </div>
 
                 {host.description && (
-                  <p className="text-xs text-slate-400 mb-4 line-clamp-2 italic">
+                  <p className="text-xs text-slate-400 mb-3 line-clamp-2 italic">
                     {host.description}
                   </p>
+                )}
+
+                {/* Quick Commands Presets Trays */}
+                {host.quickCommands && host.quickCommands.length > 0 && (
+                  <div className="mt-2.5 pt-2.5 border-t border-slate-800/60">
+                    <span className="text-[10px] font-mono text-slate-400 flex items-center gap-1 mb-1.5 uppercase tracking-wide">
+                      <Code className="w-3 h-3 text-purple-400" /> Raccourcis commandes :
+                    </span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {host.quickCommands.map((q) => (
+                        <button
+                          key={q.id}
+                          onClick={() => handleRunQuickCommand(host, q.cmd)}
+                          title={`Exécuter : ${q.cmd}`}
+                          className="text-[10px] font-mono px-2 py-1 rounded bg-purple-500/10 hover:bg-purple-500/25 text-purple-300 border border-purple-500/20 transition-all flex items-center gap-1"
+                        >
+                          <Terminal className="w-2.5 h-2.5 text-purple-400" />
+                          <span>{q.name}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 )}
               </div>
 
               {/* Action Buttons */}
-              <div className="pt-3 border-t border-slate-800/80 flex items-center justify-between gap-2">
+              <div className="pt-3 border-t border-slate-800/80 flex items-center justify-between gap-2 mt-4">
                 <div className="flex items-center gap-1">
                   <button
                     onClick={() => handleCopyCommand(host)}
@@ -435,8 +698,8 @@ export const SshHostManager: React.FC<SshHostManagerProps> = ({
       {/* Modal Form for Create / Edit Host */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-slate-900 border border-slate-800 rounded-xl w-full max-w-lg shadow-2xl overflow-hidden my-8">
-            <div className="p-4 border-b border-slate-800 flex items-center justify-between bg-slate-950/40">
+          <div className="bg-slate-900 border border-slate-800 rounded-xl w-full max-w-lg shadow-2xl overflow-hidden my-8 flex flex-col max-h-[90vh]">
+            <div className="p-4 border-b border-slate-800 flex items-center justify-between bg-slate-950/40 shrink-0">
               <h3 className="font-bold text-slate-100 text-sm flex items-center gap-2">
                 <Key className="w-4 h-4 text-emerald-400" />
                 {editingHost ? "Éditer l'Hôte SSH" : "Nouveau Serveur SSH"}
@@ -449,174 +712,251 @@ export const SshHostManager: React.FC<SshHostManagerProps> = ({
               </button>
             </div>
 
-            <form onSubmit={handleSaveHost} className="p-5 space-y-4">
+            <form onSubmit={handleSaveHost} className="p-6 space-y-4 text-xs font-mono overflow-y-auto custom-scrollbar flex-1">
+              {/* Host Name */}
               <div>
-                <label className="block text-xs font-mono text-slate-300 mb-1">Nom du Serveur</label>
+                <label className="block text-slate-400 mb-1">Nom d'affichage</label>
                 <input
                   type="text"
-                  required
                   value={formName}
                   onChange={(e) => setFormName(e.target.value)}
                   placeholder="ex: Production Web Server"
-                  className="w-full bg-slate-950 border border-slate-800 rounded px-3 py-1.5 text-xs text-slate-100 font-mono focus:outline-none focus:border-emerald-500"
+                  className="w-full bg-slate-950 border border-slate-800 rounded px-3 py-2 text-slate-100 focus:outline-none focus:border-emerald-500"
+                  required
                 />
               </div>
 
+              {/* Server Host and Port */}
               <div className="grid grid-cols-3 gap-3">
                 <div className="col-span-2">
-                  <label className="block text-xs font-mono text-slate-300 mb-1">Hôte (IP ou Domaine)</label>
+                  <label className="block text-slate-400 mb-1">IP / Nom d'Hôte</label>
                   <input
                     type="text"
-                    required
                     value={formHost}
                     onChange={(e) => setFormHost(e.target.value)}
                     placeholder="192.168.1.100 ou mydomain.com"
-                    className="w-full bg-slate-950 border border-slate-800 rounded px-3 py-1.5 text-xs text-slate-100 font-mono focus:outline-none focus:border-emerald-500"
+                    className="w-full bg-slate-950 border border-slate-800 rounded px-3 py-2 text-slate-100 focus:outline-none focus:border-emerald-500"
+                    required
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-mono text-slate-300 mb-1">Port</label>
+                  <label className="block text-slate-400 mb-1">Port</label>
                   <input
                     type="number"
-                    required
                     value={formPort}
                     onChange={(e) => setFormPort(Number(e.target.value))}
-                    className="w-full bg-slate-950 border border-slate-800 rounded px-3 py-1.5 text-xs text-slate-100 font-mono focus:outline-none focus:border-emerald-500"
+                    placeholder="22"
+                    className="w-full bg-slate-950 border border-slate-800 rounded px-3 py-2 text-slate-100 focus:outline-none focus:border-emerald-500"
+                    required
                   />
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-mono text-slate-300 mb-1">Utilisateur (SSH User)</label>
-                  <input
-                    type="text"
-                    required
-                    value={formUsername}
-                    onChange={(e) => setFormUsername(e.target.value)}
-                    placeholder="root, ubuntu, etc."
-                    className="w-full bg-slate-950 border border-slate-800 rounded px-3 py-1.5 text-xs text-slate-100 font-mono focus:outline-none focus:border-emerald-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-mono text-slate-300 mb-1">Catégorie</label>
-                  <input
-                    type="text"
-                    value={formCategory}
-                    onChange={(e) => setFormCategory(e.target.value)}
-                    placeholder="Production, Staging, etc."
-                    className="w-full bg-slate-950 border border-slate-800 rounded px-3 py-1.5 text-xs text-slate-100 font-mono focus:outline-none focus:border-emerald-500"
-                  />
-                </div>
+              {/* Username */}
+              <div>
+                <label className="block text-slate-400 mb-1">Nom d'utilisateur (Username)</label>
+                <input
+                  type="text"
+                  value={formUsername}
+                  onChange={(e) => setFormUsername(e.target.value)}
+                  placeholder="root"
+                  className="w-full bg-slate-950 border border-slate-800 rounded px-3 py-2 text-slate-100 focus:outline-none focus:border-emerald-500"
+                  required
+                />
               </div>
 
               {/* Authentication Type */}
               <div>
-                <label className="block text-xs font-mono text-slate-300 mb-1">Méthode d'Authentification</label>
-                <div className="grid grid-cols-2 gap-2">
+                <label className="block text-slate-400 mb-1">Mode d'authentification</label>
+                <div className="grid grid-cols-2 gap-3">
                   <button
                     type="button"
                     onClick={() => setFormAuthType("key")}
-                    className={`px-3 py-1.5 rounded text-xs font-mono border text-center transition-colors ${
+                    className={`py-2 px-3 border rounded text-center font-bold ${
                       formAuthType === "key"
-                        ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40"
-                        : "bg-slate-950 text-slate-400 border-slate-800"
+                        ? "bg-blue-500/10 border-blue-500/30 text-blue-300"
+                        : "bg-slate-950 border-slate-800 text-slate-400"
                     }`}
                   >
-                    🔑 Clé Privée (RSA / ED25519)
+                    Clé SSH (id_rsa / id_ed25519)
                   </button>
                   <button
                     type="button"
                     onClick={() => setFormAuthType("password")}
-                    className={`px-3 py-1.5 rounded text-xs font-mono border text-center transition-colors ${
+                    className={`py-2 px-3 border rounded text-center font-bold ${
                       formAuthType === "password"
-                        ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40"
-                        : "bg-slate-950 text-slate-400 border-slate-800"
+                        ? "bg-amber-500/10 border-amber-500/30 text-amber-300"
+                        : "bg-slate-950 border-slate-800 text-slate-400"
                     }`}
                   >
-                    🔒 Mot de passe (Invite PTY)
+                    Mot de passe
                   </button>
                 </div>
               </div>
 
+              {/* Key Path Form field (conditional) */}
               {formAuthType === "key" && (
                 <div>
-                  <label className="block text-xs font-mono text-slate-300 mb-1">Chemin vers la Clé Privée</label>
+                  <label className="block text-slate-400 mb-1">Chemin de la Clé Privée</label>
                   <input
                     type="text"
                     value={formKeyPath}
                     onChange={(e) => setFormKeyPath(e.target.value)}
-                    placeholder="~/.ssh/id_rsa ou /path/to/key.pem"
-                    className="w-full bg-slate-950 border border-slate-800 rounded px-3 py-1.5 text-xs text-slate-100 font-mono focus:outline-none focus:border-emerald-500"
+                    placeholder="~/.ssh/id_rsa"
+                    className="w-full bg-slate-950 border border-slate-800 rounded px-3 py-2 text-slate-100 focus:outline-none focus:border-emerald-500"
                   />
                 </div>
               )}
 
-              {/* Tunnels SSH (-L) */}
+              {/* Category & Accent Color */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-400 mb-1">Catégorie</label>
+                  <input
+                    type="text"
+                    value={formCategory}
+                    onChange={(e) => setFormCategory(e.target.value)}
+                    placeholder="Production, Staging, Local..."
+                    className="w-full bg-slate-950 border border-slate-800 rounded px-3 py-2 text-slate-100 focus:outline-none focus:border-emerald-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-400 mb-1">Couleur visuelle</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="color"
+                      value={formColor}
+                      onChange={(e) => setFormColor(e.target.value)}
+                      className="w-10 h-9 bg-slate-950 border border-slate-800 rounded cursor-pointer"
+                    />
+                    <input
+                      type="text"
+                      value={formColor}
+                      onChange={(e) => setFormColor(e.target.value)}
+                      className="flex-1 bg-slate-950 border border-slate-800 rounded px-3 py-2 text-slate-100"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Description */}
               <div>
-                <label className="block text-xs font-mono text-slate-300 mb-1">
-                  Redirections de Ports (Tunnels SSH -L)
-                </label>
+                <label className="block text-slate-400 mb-1">Description / Notes</label>
+                <textarea
+                  value={formDescription}
+                  onChange={(e) => setFormDescription(e.target.value)}
+                  placeholder="Description optionnelle de cet hôte..."
+                  rows={2}
+                  className="w-full bg-slate-950 border border-slate-800 rounded px-3 py-2 text-slate-100 focus:outline-none focus:border-emerald-500 placeholder-slate-600"
+                />
+              </div>
+
+              {/* Port Redirections / Tunnels List */}
+              <div>
+                <label className="block text-slate-400 mb-1">Tunnels de ports intégrés (-L LocalPort:RemoteHost:RemotePort)</label>
                 <div className="flex gap-2 mb-2">
                   <input
                     type="text"
                     value={tunnelInput}
                     onChange={(e) => setTunnelInput(e.target.value)}
-                    placeholder="ex: 8080:localhost:80"
-                    className="flex-1 bg-slate-950 border border-slate-800 rounded px-3 py-1.5 text-xs text-slate-100 font-mono focus:outline-none focus:border-emerald-500"
+                    placeholder="Ex: 8080:localhost:80"
+                    className="flex-1 bg-slate-950 border border-slate-800 rounded px-3 py-2 text-slate-100 focus:outline-none focus:border-emerald-500"
                   />
                   <button
                     type="button"
                     onClick={handleAddTunnel}
-                    className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-mono rounded"
+                    className="px-3 bg-slate-800 hover:bg-slate-700 text-emerald-400 border border-slate-700 rounded font-bold"
                   >
                     Ajouter
                   </button>
                 </div>
-
-                {formTunnels.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5">
-                    {formTunnels.map((t, idx) => (
-                      <span
-                        key={idx}
-                        className="bg-amber-500/10 text-amber-300 px-2 py-0.5 rounded text-xs border border-amber-500/20 font-mono flex items-center gap-1.5"
+                <div className="flex flex-wrap gap-1.5 p-2 bg-slate-950 rounded border border-slate-800 max-h-24 overflow-y-auto custom-scrollbar">
+                  {formTunnels.map((t) => (
+                    <span
+                      key={t}
+                      className="text-[10px] font-mono bg-slate-800 px-2 py-0.5 rounded border border-slate-700 text-slate-200 flex items-center gap-1.5"
+                    >
+                      <span>-L {t}</span>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveTunnel(t)}
+                        className="text-red-400 hover:text-red-200 font-bold"
                       >
-                        -L {t}
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveTunnel(idx)}
-                          className="hover:text-red-400"
-                        >
-                          ✕
-                        </button>
-                      </span>
-                    ))}
-                  </div>
-                )}
+                        ✕
+                      </button>
+                    </span>
+                  ))}
+                  {formTunnels.length === 0 && (
+                    <span className="text-slate-600 text-[10px] italic">Aucun tunnel de port configuré.</span>
+                  )}
+                </div>
               </div>
 
+              {/* Quick Commands Presets Manager in Form */}
               <div>
-                <label className="block text-xs font-mono text-slate-300 mb-1">Description / Notes</label>
-                <textarea
-                  value={formDescription}
-                  onChange={(e) => setFormDescription(e.target.value)}
-                  placeholder="Notes sur le serveur ou son rôle..."
-                  rows={2}
-                  className="w-full bg-slate-950 border border-slate-800 rounded px-3 py-1.5 text-xs text-slate-100 font-mono focus:outline-none focus:border-emerald-500"
-                />
+                <label className="block text-slate-400 mb-1">Raccourcis de Commandes Rapides</label>
+                <div className="grid grid-cols-2 gap-2 mb-2">
+                  <input
+                    type="text"
+                    value={qcNameInput}
+                    onChange={(e) => setQcNameInput(e.target.value)}
+                    placeholder="Libellé (ex: CPU)"
+                    className="bg-slate-950 border border-slate-800 rounded px-3.5 py-2 text-slate-100 focus:outline-none focus:border-emerald-500"
+                  />
+                  <div className="flex gap-1.5">
+                    <input
+                      type="text"
+                      value={qcCmdInput}
+                      onChange={(e) => setQcCmdInput(e.target.value)}
+                      placeholder="Commande (ex: top -b)"
+                      className="flex-1 bg-slate-950 border border-slate-800 rounded px-2.5 py-2 text-slate-100 focus:outline-none focus:border-emerald-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleAddQuickCmd}
+                      className="px-2.5 bg-slate-800 hover:bg-slate-700 text-emerald-400 border border-slate-700 rounded font-bold"
+                    >
+                      +
+                    </button>
+                  </div>
+                </div>
+
+                <div className="p-2.5 bg-slate-950 rounded border border-slate-800 max-h-28 overflow-y-auto custom-scrollbar space-y-1.5">
+                  {formQuickCmds.map((q) => (
+                    <div
+                      key={q.id}
+                      className="flex items-center justify-between text-[11px] font-mono bg-slate-900 border border-slate-800 p-1.5 rounded"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="text-emerald-400 font-bold">{q.name} :</span>
+                        <span className="text-slate-400 font-normal line-clamp-1 italic">{q.cmd}</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveQuickCmd(q.id)}
+                        className="text-red-400 hover:text-red-200 font-bold px-1"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                  {formQuickCmds.length === 0 && (
+                    <span className="text-slate-600 text-[10px] italic">Aucune commande rapide configurée.</span>
+                  )}
+                </div>
               </div>
 
-              <div className="pt-3 border-t border-slate-800 flex justify-end gap-2">
+              <div className="pt-4 border-t border-slate-800 shrink-0 flex justify-end gap-3">
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-mono rounded"
+                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-lg"
                 >
                   Annuler
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-bold text-xs font-mono rounded"
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-bold rounded-lg shadow"
                 >
                   Enregistrer l'Hôte
                 </button>

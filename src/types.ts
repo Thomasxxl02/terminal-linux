@@ -33,6 +33,21 @@ export interface TerminalTheme {
   brightWhite: string;
 }
 
+export interface DiskStat {
+  total: number;
+  free: number;
+  used: number;
+  percent: number;
+}
+
+export interface SystemProcess {
+  pid: number;
+  user: string;
+  cpu: number;
+  mem: number;
+  name: string;
+}
+
 export interface SystemStats {
   platform: string;
   release: string;
@@ -46,6 +61,8 @@ export interface SystemStats {
   memUsagePercent: number;
   uptime: number;
   loadavg: number[];
+  disk?: DiskStat;
+  processes?: SystemProcess[];
 }
 
 export interface FileTreeItem {
@@ -82,6 +99,7 @@ export interface ShellProfile {
   color: string;
   iconName?: string;
   isDefault?: boolean;
+  startupScript?: string;
 }
 
 export interface SavedTabSession {
@@ -122,6 +140,7 @@ export interface SshHost {
   category?: string;
   color?: string;
   description?: string;
+  quickCommands?: { id: string; name: string; cmd: string }[];
 }
 
 export interface SshTunnel {
@@ -137,6 +156,8 @@ export interface SshTunnel {
   trafficSent?: number;
   trafficReceived?: number;
   latency?: number;
+  serverAliveInterval?: number;
+  exitOnFailure?: boolean;
 }
 
 export interface TauriSourceCode {

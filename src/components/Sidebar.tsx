@@ -16,7 +16,8 @@ import {
   Sliders,
   Layers,
   Key,
-  Zap
+  Zap,
+  Sparkles
 } from "lucide-react";
 import { TerminalSessionInfo, SystemStats } from "../types";
 
@@ -42,14 +43,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
   systemStats,
 }) => {
   const navItems = [
-    { id: "terminal", label: "Terminaux PTY", icon: Terminal, badge: sessions.length },
-    { id: "ssh", label: "Carnet SSH & Tunnels", icon: Key, badge: "Hosts" },
-    { id: "tunnels", label: "Tunnels & Reverse Proxy", icon: Zap, badge: "PortFWD" },
-    { id: "profiles", label: "Profils & Shells", icon: Sliders, badge: "Custom" },
-    { id: "playbooks", label: "Automation Playbooks", icon: Layers, badge: "Pipelines" },
-    { id: "maintenance", label: "Maintenance Système", icon: Wrench, badge: "APT/Cache" },
+    { id: "terminal", label: "Terminaux PTY", icon: Terminal },
+    { id: "ssh", label: "Carnet SSH & Tunnels", icon: Key },
+    { id: "tunnels", label: "Tunnels & Reverse Proxy", icon: Zap },
+    { id: "profiles", label: "Profils & Shells", icon: Sliders },
+    { id: "playbooks", label: "Automation Playbooks", icon: Layers },
+    { id: "maintenance", label: "Maintenance Système", icon: Wrench },
     { id: "monaco", label: "Éditeur Monaco", icon: FileCode },
-    { id: "tauri", label: "Architecture Tauri/Rust", icon: Box },
+    { id: "tauri", label: "Architectures", icon: Box },
+    { id: "skills", label: "Skills / Fonctions", icon: Sparkles },
     { id: "snippets", label: "Bibliothèque Snippets", icon: Bookmark },
     { id: "stats", label: "Ressources Système", icon: Activity },
   ];
@@ -97,17 +99,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   <Icon className={`w-4 h-4 ${isActive ? "text-emerald-400" : "text-slate-400"}`} />
                   <span>{item.label}</span>
                 </div>
-                {item.badge !== undefined && (
-                  <span
-                    className={`text-[10px] font-mono px-1.5 py-0.2 rounded-full ${
-                      isActive
-                        ? "bg-emerald-500/30 text-emerald-200"
-                        : "bg-slate-800 text-slate-400"
-                    }`}
-                  >
-                    {item.badge}
-                  </span>
-                )}
               </button>
             );
           })}

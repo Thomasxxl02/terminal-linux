@@ -11,7 +11,17 @@ import {
   XCircle,
   Clock,
   AlertTriangle,
-  Terminal
+  Terminal,
+  Activity,
+  Award,
+  BookOpen,
+  PlusCircle,
+  BarChart3,
+  ChevronRight,
+  Sparkles,
+  Zap,
+  Check,
+  Edit2
 } from "lucide-react";
 import { Playbook, PlaybookStep, TerminalSessionInfo } from "../types";
 import { useLocalStorage } from "../hooks/useLocalStorage";
@@ -134,7 +144,27 @@ const PRESET_PLAYBOOKS: Playbook[] = [
   },
 ];
 
+// Preconfigured Snippet Library for Fast Appends
+const TEMPLATE_SNIPPETS = [
+  { title: "Nettoyage Docker", desc: "Supprime conteneurs/volumes orphelins", cmd: "docker system prune -af --volumes", delay: 2 },
+  { title: "Mise à jour APT", desc: "Actualise le catalogue Debian/Ubuntu", cmd: "sudo apt-get update && sudo apt-get upgrade -y", delay: 3 },
+  { title: "Force Pull Git", desc: "Écrase les modifications locales", cmd: "git fetch origin && git reset --hard origin/main", delay: 2 },
+  { title: "Statut Services", desc: "Vérifie Nginx & Systemd", cmd: "systemctl status nginx --no-pager", delay: 1 },
+  { title: "Redémarrage App", desc: "Relancer PM2 Node service", cmd: "pm2 restart all || npm run start", delay: 2 },
+  { title: "Diagnostic Ports", desc: "Trouve les processus d'écoute", cmd: "lsof -i -P -n | grep LISTEN", delay: 1 }
+];
+
 const STORAGE_KEY_PLAYBOOKS = "tauri_linux_playbooks";
+const STORAGE_KEY_HISTORY = "tauri_linux_playbook_history";
+
+interface PlaybookHistoryItem {
+  id: string;
+  playbookId: string;
+  playbookName: string;
+  timestamp: number;
+  durationSeconds: number;
+  status: "success" | "failed";
+}
 
 interface PlaybookSequencerProps {
   sessions: TerminalSessionInfo[];
@@ -155,6 +185,16 @@ export const PlaybookSequencer: React.FC<PlaybookSequencerProps> = ({
   );
   const [selectedPlaybook, setSelectedPlaybook] = useState<Playbook | null>(() => playbooks[0] || null);
   const [selectedSessionId, setSelectedSessionId] = useState<string>("");
+
+  // History tracking local persistence
+  const [historyList, setHistoryList] = useLocalStorage<PlaybookHistoryItem[]>(
+    STORAGE_KEY_HISTORY,
+    [
+      { id: "h1", playbookId: "pb_build_deploy", playbookName: "🚀 Pipeline Build & Déploiement App", timestamp: Date.now() - 3600000 * 2, durationSeconds: 6, status: "success" },
+      { id: "h2", playbookId: "pb_sys_maint", playbookName: "🧹 Maintenance Système & Purge Cache", timestamp: Date.now() - 3600000 * 5, durationSeconds: 4, status: "success" },
+      { id: "h3", playbookId: "pb_sec_audit", playbookName: "🔒 Audit Sécurité & Inspection Réseau", timestamp: Date.now() - 3600000 * 12, durationSeconds: 3, status: "failed" }
+    ]
+  );
 
   // Runner state
   const [runningStepIndex, setRunningStepIndex] = useState<number | null>(null);
@@ -211,6 +251,9 @@ export const PlaybookSequencer: React.FC<PlaybookSequencerProps> = ({
     // Switch to terminal view to let user watch execution output
     onOpenTerminalView();
 
+    const startTime = Date.now();
+    let isPbSuccess = true;
+
     for (let i = 0; i < selectedPlaybook.steps.length; i++) {
       const step = selectedPlaybook.steps[i];
       setRunningStepIndex(i);
@@ -234,6 +277,19 @@ export const PlaybookSequencer: React.FC<PlaybookSequencerProps> = ({
       `echo -e "\\n\\e[1;32m[PLAYBOOK PIPELINE] ✅ Pipeline '${selectedPlaybook.name}' exécuté avec succès !\\e[0m"`,
       selectedSessionId
     );
+
+    const duration = Math.floor((Date.now() - startTime) / 1000);
+
+    // Persist to history list
+    const newHistItem: PlaybookHistoryItem = {
+      id: `h_${Date.now()}`,
+      playbookId: selectedPlaybook.id,
+      playbookName: selectedPlaybook.name,
+      timestamp: Date.now(),
+      durationSeconds: duration,
+      status: isPbSuccess ? "success" : "failed"
+    };
+    setHistoryList([newHistItem, ...historyList]);
 
     setIsRunning(false);
     setRunningStepIndex(null);
@@ -393,6 +449,40 @@ export const PlaybookSequencer: React.FC<PlaybookSequencerProps> = ({
     showNotification("Playbook supprimé.");
   };
 
+  // Append preset snippet to current form editing steps
+  const handleAppendSnippet = (snippet: typeof TEMPLATE_SNIPPETS[0]) => {
+    const newStep: PlaybookStep = {
+      id: `s_${Date.now()}_${Math.random().toString(36).substring(2, 5)}`,
+      title: snippet.title,
+      command: snippet.cmd,
+      description: snippet.desc,
+      stopOnError: true,
+      delaySeconds: snippet.delay
+    };
+    setFormSteps([...formSteps, newStep]);
+  };
+
+  // Estimation utility
+  const getEstimatedDuration = (pb: Playbook | null) => {
+    if (!pb) return "0s";
+    const sum = pb.steps.reduce((acc, step) => acc + (step.delaySeconds || 1), 0);
+    if (sum >= 60) {
+      const mins = Math.floor(sum / 60);
+      const secs = sum % 60;
+      return `${mins}m ${secs}s`;
+    }
+    return `${sum}s`;
+  };
+
+  // Calculate stats values
+  const totalRuns = historyList.length;
+  const successRate = totalRuns > 0
+    ? Math.round((historyList.filter((h) => h.status === "success").length / totalRuns) * 100)
+    : 100;
+  const avgDuration = totalRuns > 0
+    ? Math.round(historyList.reduce((acc, h) => acc + h.durationSeconds, 0) / totalRuns)
+    : 0;
+
   return (
     <div className="flex-1 bg-slate-950 text-slate-100 flex flex-col h-full overflow-hidden">
       {/* Top Header Bar */}
@@ -448,131 +538,133 @@ export const PlaybookSequencer: React.FC<PlaybookSequencerProps> = ({
             BIBLIOTHÈQUE DE PLAYBOOKS
           </h3>
 
-          <div className="flex-1 overflow-y-auto space-y-2 custom-scrollbar pr-1">
+          <div className="flex-1 overflow-y-auto space-y-2 pr-1 custom-scrollbar">
             {playbooks.map((pb) => {
               const isSelected = selectedPlaybook?.id === pb.id;
               return (
                 <div
                   key={pb.id}
-                  onClick={() => setSelectedPlaybook(pb)}
-                  className={`p-3 rounded-xl border cursor-pointer transition-all ${
+                  onClick={() => !isRunning && setSelectedPlaybook(pb)}
+                  className={`p-3 rounded-lg border text-left cursor-pointer transition-all ${
                     isSelected
-                      ? "bg-teal-500/10 border-teal-500/40 shadow-md"
-                      : "bg-slate-950/40 border-slate-800 hover:bg-slate-800/40 hover:border-slate-700 text-slate-400"
+                      ? "bg-teal-500/10 border-teal-500/40 text-teal-200"
+                      : "bg-slate-950/60 border-slate-800 text-slate-300 hover:bg-slate-950 hover:border-slate-700"
                   }`}
                 >
-                  <div className="flex items-center justify-between mb-1">
-                    <h4
-                      className={`font-semibold text-xs ${
-                        isSelected ? "text-teal-300" : "text-slate-200"
-                      }`}
-                    >
-                      {pb.name}
-                    </h4>
-                    <span className="text-[10px] font-mono px-2 py-0.2 rounded bg-slate-800 text-slate-400 uppercase">
+                  <div className="flex items-center justify-between gap-1 mb-1">
+                    <h4 className="font-bold text-xs font-mono line-clamp-1">{pb.name}</h4>
+                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded uppercase tracking-wider bg-slate-800 border border-slate-700">
                       {pb.category}
                     </span>
                   </div>
-
-                  <p className="text-[11px] text-slate-400 line-clamp-2 mb-2 font-sans">
+                  <p className="text-[11px] text-slate-400 line-clamp-2 italic mb-2">
                     {pb.description}
                   </p>
 
                   <div className="flex items-center justify-between text-[10px] font-mono text-slate-500">
-                    <span>{pb.steps.length} Étapes</span>
-                    <span>{new Date(pb.createdAt).toLocaleDateString()}</span>
+                    <span className="flex items-center gap-1">
+                      <Clock className="w-3 h-3 text-slate-500" />
+                      Durée: {getEstimatedDuration(pb)}
+                    </span>
+                    <span>{pb.steps.length} étapes</span>
                   </div>
                 </div>
               );
             })}
           </div>
+
+          {/* Quick Metrics History Panel at Bottom-Left */}
+          <div className="mt-3 pt-3 border-t border-slate-800 space-y-2.5">
+            <h4 className="text-[10px] font-mono uppercase tracking-wider text-slate-400 font-bold flex items-center gap-1">
+              <BarChart3 className="w-3.5 h-3.5 text-teal-400" /> Stats d'Automatisation
+            </h4>
+            <div className="grid grid-cols-3 gap-2 text-center font-mono">
+              <div className="bg-slate-950 p-1.5 rounded border border-slate-800">
+                <span className="block text-slate-500 text-[9px] uppercase">Lancements</span>
+                <span className="text-xs text-teal-300 font-bold">{totalRuns}</span>
+              </div>
+              <div className="bg-slate-950 p-1.5 rounded border border-slate-800">
+                <span className="block text-slate-500 text-[9px] uppercase">Succès</span>
+                <span className="text-xs text-emerald-400 font-bold">{successRate}%</span>
+              </div>
+              <div className="bg-slate-950 p-1.5 rounded border border-slate-800">
+                <span className="block text-slate-500 text-[9px] uppercase">Durée Moy</span>
+                <span className="text-xs text-indigo-400 font-bold">{avgDuration}s</span>
+              </div>
+            </div>
+
+            {/* Micro SVG graph of last runs durations */}
+            {historyList.length > 0 && (
+              <div className="bg-slate-950 p-2 rounded border border-slate-800 h-14 relative flex items-end">
+                <span className="absolute top-1 left-2 text-[8px] font-mono text-slate-500">Tendance de vitesse d'exécution :</span>
+                <svg className="w-full h-8" viewBox="0 0 100 20" preserveAspectRatio="none">
+                  <path
+                    d={`M ${historyList.slice(-8).map((h, i) => `${(i * 100) / 7} ${Math.max(2, 20 - (h.durationSeconds / 10) * 15)}`).join(" L ")}`}
+                    fill="none"
+                    stroke="#14b8a6"
+                    strokeWidth="1.5"
+                  />
+                </svg>
+              </div>
+            )}
+          </div>
         </div>
 
-        {/* Right Side: Selected Playbook Sequencer Runner */}
+        {/* Right Side: Active Playbook Execution Console */}
         <div className="lg:col-span-2 bg-slate-900 border border-slate-800 rounded-xl p-4 flex flex-col h-full overflow-hidden">
           {selectedPlaybook ? (
-            <div className="flex flex-col h-full overflow-hidden">
-              {/* Selected Playbook Header & Actions */}
-              <div className="pb-3 border-b border-slate-800 flex flex-wrap items-center justify-between gap-3 shrink-0">
+            <div className="flex-1 flex flex-col h-full overflow-hidden">
+              {/* Playbook Info Header */}
+              <div className="pb-4 border-b border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shrink-0">
                 <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-sm font-semibold text-slate-100">{selectedPlaybook.name}</h3>
-                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-teal-500/20 text-teal-300 border border-teal-500/30 uppercase">
-                      {selectedPlaybook.category}
+                  <h3 className="font-bold text-slate-200 text-sm flex items-center gap-2">
+                    {selectedPlaybook.name}
+                    <span className="text-[10px] bg-teal-500/10 text-teal-400 border border-teal-500/20 px-2 py-0.5 rounded font-mono font-normal">
+                      Estimé : {getEstimatedDuration(selectedPlaybook)}
                     </span>
-                  </div>
-                  <p className="text-xs text-slate-400 mt-0.5">{selectedPlaybook.description}</p>
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-1 italic">
+                    {selectedPlaybook.description}
+                  </p>
                 </div>
 
                 <div className="flex items-center gap-2">
                   <button
-                    onClick={() => handleOpenEditModal(selectedPlaybook)}
-                    className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-mono rounded border border-slate-700 transition-colors"
+                    onClick={handleDownloadBashScript}
+                    title="Télécharger sous forme de script .sh"
+                    className="p-2 bg-slate-950 border border-slate-800 text-slate-300 hover:text-slate-100 rounded-lg"
                   >
-                    Éditer
+                    <FileCode2 className="w-4 h-4" />
                   </button>
 
                   <button
                     onClick={handleExportJson}
-                    className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded border border-slate-700 transition-colors"
-                    title="Exporter en JSON"
+                    title="Exporter au format JSON"
+                    className="p-2 bg-slate-950 border border-slate-800 text-slate-300 hover:text-slate-100 rounded-lg"
                   >
                     <Download className="w-4 h-4" />
                   </button>
 
                   <button
-                    onClick={handleDownloadBashScript}
-                    className="flex items-center gap-1.5 px-2.5 py-1.5 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 font-mono text-xs font-semibold rounded transition-colors"
-                    title="Générer et télécharger un script Bash .sh exécutable"
+                    onClick={() => handleOpenEditModal(selectedPlaybook)}
+                    disabled={isRunning}
+                    className="p-2 bg-slate-950 border border-slate-800 text-slate-300 hover:text-slate-100 rounded-lg disabled:opacity-45"
                   >
-                    <FileCode2 className="w-3.5 h-3.5 text-indigo-400" />
-                    <span>Script .sh</span>
+                    <Edit2 className="w-4 h-4" />
                   </button>
 
                   <button
                     onClick={() => handleDeletePlaybook(selectedPlaybook.id)}
-                    className="p-1.5 hover:bg-red-500/10 text-slate-500 hover:text-red-400 rounded transition-colors"
-                    title="Supprimer Playbook"
+                    disabled={isRunning}
+                    className="p-2 bg-slate-950 border border-slate-800 text-red-400 hover:bg-red-500/10 rounded-lg disabled:opacity-45"
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>
                 </div>
               </div>
 
-              {/* Target Terminal Session Selector & Execution Trigger */}
-              <div className="my-3 p-3 bg-slate-950 rounded-xl border border-slate-800 flex items-center justify-between gap-3 shrink-0 font-mono text-xs">
-                <div className="flex items-center gap-2">
-                  <Terminal className="w-4 h-4 text-teal-400" />
-                  <span className="text-slate-400">Terminal PTY Cible:</span>
-                  <select
-                    value={selectedSessionId}
-                    onChange={(e) => setSelectedSessionId(e.target.value)}
-                    className="bg-slate-900 border border-slate-700 text-slate-100 rounded px-2.5 py-1 focus:outline-none"
-                  >
-                    {sessions.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.name} ({s.shell})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <button
-                  onClick={handleStartPlaybook}
-                  disabled={isRunning || sessions.length === 0}
-                  className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-slate-950 font-bold rounded-lg shadow transition-all transform hover:scale-102"
-                >
-                  <Play className="w-4 h-4 fill-current" />
-                  <span>{isRunning ? "Pipeline en cours..." : "LANCER LE PIPELINE"}</span>
-                </button>
-              </div>
-
-              {/* Steps Sequence List */}
-              <div className="flex-1 overflow-y-auto space-y-3 custom-scrollbar pr-1">
-                <h4 className="text-[11px] font-mono uppercase tracking-wider text-slate-400 font-semibold mb-2">
-                  SÉQUENCE D'ÉTAPES AUTOMATISÉES ({selectedPlaybook.steps.length})
-                </h4>
-
+              {/* Steps Sequencer Flow (Central area) */}
+              <div className="flex-1 overflow-y-auto my-4 space-y-3 pr-1 custom-scrollbar">
                 {selectedPlaybook.steps.map((step, idx) => {
                   const status = stepStatuses[step.id] || "pending";
                   const isCurrent = runningStepIndex === idx;
@@ -580,249 +672,288 @@ export const PlaybookSequencer: React.FC<PlaybookSequencerProps> = ({
                   return (
                     <div
                       key={step.id}
-                      className={`p-3.5 rounded-xl border font-mono text-xs transition-all ${
+                      className={`p-3 rounded-lg border font-mono text-xs transition-all relative ${
                         isCurrent
-                          ? "bg-teal-500/20 border-teal-500/60 shadow-lg ring-1 ring-teal-500"
+                          ? "bg-teal-500/5 border-teal-500/40 text-teal-200"
                           : status === "success"
-                          ? "bg-slate-950/60 border-emerald-500/40 text-slate-200"
-                          : "bg-slate-950 border-slate-800 text-slate-300"
+                          ? "bg-slate-950/20 border-emerald-500/25 text-slate-300"
+                          : "bg-slate-950/40 border-slate-800 text-slate-400"
                       }`}
                     >
-                      <div className="flex items-center justify-between mb-1.5">
-                        <div className="flex items-center gap-2.5">
-                          <span className="w-6 h-6 rounded-full bg-slate-800 text-slate-300 flex items-center justify-center font-bold text-[11px] border border-slate-700">
-                            {idx + 1}
-                          </span>
-                          <span className="font-semibold text-slate-100 text-sm">{step.title}</span>
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="space-y-1">
+                          <h4 className="font-bold text-slate-200 flex items-center gap-2">
+                            <span className="text-[10px] text-teal-400 px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 font-mono">
+                              Étape {idx + 1}
+                            </span>
+                            {step.title}
+                          </h4>
+                          {step.description && (
+                            <p className="text-[11px] text-slate-400 italic font-normal">
+                              {step.description}
+                            </p>
+                          )}
+                          <div className="bg-slate-950 p-2 rounded border border-slate-900 font-mono text-[10.5px] text-teal-300 mt-2 whitespace-pre-wrap select-all">
+                            {step.command}
+                          </div>
                         </div>
 
-                        {/* Status Badge */}
-                        <div className="flex items-center gap-2">
-                          {status === "pending" && (
-                            <span className="text-[10px] px-2 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700">
-                              En attente
-                            </span>
-                          )}
-                          {status === "running" && (
-                            <span className="text-[10px] px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center gap-1 animate-pulse">
-                              <Clock className="w-3 h-3" /> En cours...
-                            </span>
-                          )}
-                          {status === "success" && (
-                            <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 flex items-center gap-1">
-                              <CheckCircle2 className="w-3 h-3 text-emerald-400" /> Succès
-                            </span>
-                          )}
-                          {status === "failed" && (
-                            <span className="text-[10px] px-2 py-0.5 rounded bg-red-500/20 text-red-300 border border-red-500/40 flex items-center gap-1">
-                              <XCircle className="w-3 h-3 text-red-400" /> Échec
-                            </span>
-                          )}
-                        </div>
-                      </div>
+                        {/* Status badge Indicator */}
+                        <div className="shrink-0 flex items-center gap-1 text-[10px] font-mono">
+                          <Clock className="w-3.5 h-3.5 text-slate-500" />
+                          <span>{step.delaySeconds || 1}s</span>
 
-                      {/* Command Code snippet block */}
-                      <div className="bg-slate-900 border border-slate-800 rounded-lg p-2.5 my-2 text-emerald-300 font-mono text-xs overflow-x-auto flex items-center justify-between">
-                        <code>$ {step.command}</code>
-                      </div>
-
-                      {/* Details & Flags */}
-                      <div className="flex items-center justify-between text-[11px] text-slate-400">
-                        <span>{step.description || "Aucune description"}</span>
-                        <div className="flex items-center gap-3">
-                          <span>Pause: {step.delaySeconds}s</span>
-                          {step.stopOnError ? (
-                            <span className="text-red-400 flex items-center gap-1">
-                              <AlertTriangle className="w-3 h-3" /> Stop si Erreur
-                            </span>
-                          ) : (
-                            <span className="text-slate-500">Poursuivre si Erreur</span>
-                          )}
+                          <div className="ml-2 shrink-0">
+                            {status === "success" ? (
+                              <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                            ) : status === "running" ? (
+                              <Activity className="w-4 h-4 text-amber-400 animate-pulse" />
+                            ) : (
+                              <div className="w-4 h-4 rounded-full border border-slate-700" />
+                            )}
+                          </div>
                         </div>
                       </div>
                     </div>
                   );
                 })}
               </div>
+
+              {/* Execution Console Footer */}
+              <div className="pt-4 border-t border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shrink-0">
+                <div className="flex items-center gap-3 font-mono text-xs">
+                  <div>
+                    <span className="text-slate-500">Terminal PTY :</span>
+                    <select
+                      value={selectedSessionId}
+                      onChange={(e) => setSelectedSessionId(e.target.value)}
+                      disabled={isRunning}
+                      className="ml-2 bg-slate-950 border border-slate-800 rounded px-2.5 py-1 text-slate-200 focus:outline-none focus:border-teal-500"
+                    >
+                      {sessions.map((s) => (
+                        <option key={s.id} value={s.id}>{s.name}</option>
+                      ))}
+                      {sessions.length === 0 && <option value="">Aucun terminal ouvert</option>}
+                    </select>
+                  </div>
+                </div>
+
+                <button
+                  onClick={handleStartPlaybook}
+                  disabled={isRunning || sessions.length === 0}
+                  className="px-6 py-2.5 bg-teal-600 hover:bg-teal-500 disabled:opacity-40 text-slate-950 font-bold font-mono text-xs rounded-lg shadow-md flex items-center gap-2 self-end transition-all uppercase tracking-wider"
+                >
+                  <Play className="w-4 h-4 fill-current text-slate-950" />
+                  <span>LANCER LE PIPELINE</span>
+                </button>
+              </div>
             </div>
           ) : (
-            <div className="flex flex-col items-center justify-center h-full text-slate-500">
-              <p>Sélectionnez un Playbook dans la bibliothèque</p>
+            <div className="flex-1 flex flex-col items-center justify-center text-slate-500">
+              <Layers className="w-12 h-12 mb-2 text-slate-700" />
+              <p className="text-sm">Sélectionnez ou créez un playbook pour commencer.</p>
             </div>
           )}
         </div>
       </div>
 
-      {/* Modal Form for Create / Edit Playbook */}
+      {/* Editing / Creation Modal Form with Snippet catalog panel inside! */}
       {isEditingModalOpen && (
         <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-full max-w-2xl bg-slate-900 border border-slate-800 rounded-xl shadow-2xl p-6 max-h-[90vh] flex flex-col overflow-hidden">
-            <h3 className="text-base font-semibold text-slate-100 mb-4 flex items-center gap-2">
-              <Layers className="w-5 h-5 text-teal-400" />
-              {editingPlaybook ? "Éditer le Pipeline d'Automation" : "Créer un Nouveau Pipeline de Playbook"}
-            </h3>
+          <div className="bg-slate-900 border border-slate-800 rounded-xl w-full max-w-4xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
+            <div className="p-4 border-b border-slate-800 flex items-center justify-between bg-slate-950/40 shrink-0">
+              <h3 className="font-bold text-slate-100 text-sm flex items-center gap-2">
+                <Layers className="w-4 h-4 text-teal-400" />
+                {editingPlaybook ? "Éditer le Playbook" : "Créer un Nouveau Playbook"}
+              </h3>
+              <button onClick={() => setIsEditingModalOpen(false)} className="text-slate-400 hover:text-slate-200">✕</button>
+            </div>
 
-            <form onSubmit={handleSavePlaybook} className="flex-1 overflow-y-auto space-y-4 font-mono text-xs pr-1 custom-scrollbar">
-              <div>
-                <label className="block text-slate-400 mb-1">Titre du Pipeline</label>
-                <input
-                  type="text"
-                  value={formName}
-                  onChange={(e) => setFormName(e.target.value)}
-                  placeholder="Ex: Redémarrage Service Docker Nginx"
-                  className="w-full bg-slate-950 border border-slate-800 rounded px-3 py-2 text-slate-100 focus:outline-none focus:border-teal-500"
-                  required
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
+            {/* Modal content partitioned: Left Form inputs, Right Snippet Template Drag Catalog */}
+            <div className="flex-1 overflow-hidden grid grid-cols-1 md:grid-cols-5 h-full">
+              {/* Left Column: Playbook form parameters and steps lists */}
+              <form onSubmit={handleSavePlaybook} className="md:col-span-3 p-6 overflow-y-auto custom-scrollbar space-y-4 border-r border-slate-800 text-xs font-mono">
                 <div>
-                  <label className="block text-slate-400 mb-1">Catégorie</label>
-                  <select
-                    value={formCategory}
-                    onChange={(e) => setFormCategory(e.target.value as Playbook["category"])}
+                  <label className="block text-slate-400 mb-1">Nom du Playbook</label>
+                  <input
+                    type="text"
+                    value={formName}
+                    onChange={(e) => setFormName(e.target.value)}
+                    placeholder="Ex: Nettoyage et Déploiement"
                     className="w-full bg-slate-950 border border-slate-800 rounded px-3 py-2 text-slate-100 focus:outline-none focus:border-teal-500"
-                  >
-                    <option value="dev">Développement</option>
-                    <option value="maintenance">Maintenance Système</option>
-                    <option value="deploy">Déploiement</option>
-                    <option value="security">Sécurité & Audit</option>
-                    <option value="custom">Personnalisé</option>
-                  </select>
+                    required
+                  />
                 </div>
 
                 <div>
-                  <label className="block text-slate-400 mb-1">Description Synthétique</label>
-                  <input
-                    type="text"
+                  <label className="block text-slate-400 mb-1">Description</label>
+                  <textarea
                     value={formDescription}
                     onChange={(e) => setFormDescription(e.target.value)}
-                    placeholder="Ex: Enchaîne git pull, npm build et restart"
+                    placeholder="Notes sur ce pipeline d'automation..."
+                    rows={2}
                     className="w-full bg-slate-950 border border-slate-800 rounded px-3 py-2 text-slate-100 focus:outline-none focus:border-teal-500"
                   />
                 </div>
-              </div>
 
-              {/* Dynamic Steps Editor */}
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <label className="text-slate-300 font-bold uppercase tracking-wider text-[11px]">
-                    Étapes de Commandes du Pipeline ({formSteps.length})
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setFormSteps([
-                        ...formSteps,
-                        {
-                          id: `s_${Date.now()}`,
-                          title: `Étape ${formSteps.length + 1}`,
-                          command: "echo 'Nouvelle commande'",
-                          stopOnError: true,
-                          delaySeconds: 1,
-                        },
-                      ])
-                    }
-                    className="text-teal-400 hover:underline flex items-center gap-1 text-[11px]"
-                  >
-                    <Plus className="w-3.5 h-3.5" /> Ajouter une Étape
-                  </button>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-slate-400 mb-1">Catégorie</label>
+                    <select
+                      value={formCategory}
+                      onChange={(e) => setFormCategory(e.target.value as Playbook["category"])}
+                      className="w-full bg-slate-950 border border-slate-800 rounded px-3 py-2 text-slate-100 focus:outline-none focus:border-teal-500"
+                    >
+                      <option value="dev">Développement</option>
+                      <option value="maintenance">Maintenance</option>
+                      <option value="deploy">Déploiement</option>
+                      <option value="security">Sécurité</option>
+                      <option value="custom">Personnalisé</option>
+                    </select>
+                  </div>
+
+                  {/* Projected total time indicator */}
+                  <div className="bg-slate-950 p-2.5 rounded border border-slate-800 flex flex-col justify-center">
+                    <span className="text-[10px] text-slate-500 uppercase">Temps Estimé</span>
+                    <span className="text-xs text-teal-400 font-bold flex items-center gap-1 mt-0.5">
+                      <Clock className="w-3.5 h-3.5 text-teal-400" />
+                      {formSteps.reduce((acc, s) => acc + (s.delaySeconds || 1), 0)}s total
+                    </span>
+                  </div>
                 </div>
 
-                <div className="space-y-3">
-                  {formSteps.map((step, idx) => (
-                    <div
-                      key={step.id}
-                      className="p-3 bg-slate-950 border border-slate-800 rounded-lg space-y-2 relative"
+                {/* Steps Config list */}
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="text-slate-400 font-bold">Étapes du Pipeline ({formSteps.length})</label>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setFormSteps([
+                          ...formSteps,
+                          {
+                            id: `s_${Date.now()}`,
+                            title: `Nouvelle Étape #${formSteps.length + 1}`,
+                            command: "echo 'Action'",
+                            stopOnError: true,
+                            delaySeconds: 1,
+                          },
+                        ])
+                      }
+                      className="text-teal-400 flex items-center gap-1 hover:underline text-[11px]"
                     >
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="font-bold text-teal-400">Étape #{idx + 1}</span>
+                      <PlusCircle className="w-3.5 h-3.5" /> Ajouter Étape brute
+                    </button>
+                  </div>
+
+                  <div className="space-y-3 max-h-56 overflow-y-auto custom-scrollbar p-1">
+                    {formSteps.map((step, idx) => (
+                      <div key={step.id} className="p-3 bg-slate-950 rounded-lg border border-slate-800 space-y-2 relative">
                         <button
                           type="button"
-                          onClick={() => setFormSteps(formSteps.filter((_, i) => i !== idx))}
-                          className="text-slate-500 hover:text-red-400"
+                          onClick={() => setFormSteps(formSteps.filter((s) => s.id !== step.id))}
+                          className="absolute top-2.5 right-2.5 text-slate-500 hover:text-red-400 p-1"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
-                      </div>
 
-                      <input
-                        type="text"
-                        placeholder="Titre de l'étape (ex: Git Pull)"
-                        value={step.title}
-                        onChange={(e) => {
-                          const updated = [...formSteps];
-                          updated[idx].title = e.target.value;
-                          setFormSteps(updated);
-                        }}
-                        className="w-full bg-slate-900 border border-slate-800 rounded px-2.5 py-1 text-slate-100 focus:outline-none"
-                      />
+                        <div className="grid grid-cols-3 gap-2">
+                          <div className="col-span-2">
+                            <label className="text-[10px] text-slate-500">Titre de l'étape</label>
+                            <input
+                              type="text"
+                              value={step.title}
+                              onChange={(e) => {
+                                const updated = [...formSteps];
+                                updated[idx].title = e.target.value;
+                                setFormSteps(updated);
+                              }}
+                              className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-xs text-slate-200 focus:outline-none"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[10px] text-slate-500">Pause (sec)</label>
+                            <input
+                              type="number"
+                              value={step.delaySeconds}
+                              onChange={(e) => {
+                                const updated = [...formSteps];
+                                updated[idx].delaySeconds = Number(e.target.value);
+                                setFormSteps(updated);
+                              }}
+                              className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-xs text-slate-200 focus:outline-none"
+                            />
+                          </div>
+                        </div>
 
-                      <input
-                        type="text"
-                        placeholder="Commande bash exacte (ex: npm run build)"
-                        value={step.command}
-                        onChange={(e) => {
-                          const updated = [...formSteps];
-                          updated[idx].command = e.target.value;
-                          setFormSteps(updated);
-                        }}
-                        className="w-full bg-slate-900 border border-slate-800 rounded px-2.5 py-1 text-emerald-300 font-mono focus:outline-none"
-                      />
-
-                      <div className="flex items-center justify-between pt-1 text-[11px] text-slate-400">
-                        <label className="flex items-center gap-1.5 cursor-pointer">
+                        <div>
+                          <label className="text-[10px] text-slate-500">Commande Shell à lancer</label>
                           <input
-                            type="checkbox"
-                            checked={step.stopOnError}
+                            type="text"
+                            value={step.command}
                             onChange={(e) => {
                               const updated = [...formSteps];
-                              updated[idx].stopOnError = e.target.checked;
+                              updated[idx].command = e.target.value;
                               setFormSteps(updated);
                             }}
-                            className="rounded border-slate-800 text-teal-500 focus:ring-0"
+                            className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-xs text-slate-200 font-mono focus:outline-none"
                           />
-                          <span>Arrêter le pipeline si cette étape échoue</span>
-                        </label>
-
-                        <div className="flex items-center gap-1">
-                          <span>Pause après:</span>
-                          <input
-                            type="number"
-                            min="0"
-                            max="60"
-                            value={step.delaySeconds}
-                            onChange={(e) => {
-                              const updated = [...formSteps];
-                              updated[idx].delaySeconds = parseInt(e.target.value) || 0;
-                              setFormSteps(updated);
-                            }}
-                            className="w-12 bg-slate-900 border border-slate-800 text-center rounded text-slate-100 py-0.5"
-                          />
-                          <span>sec</span>
                         </div>
                       </div>
+                    ))}
+                    {formSteps.length === 0 && (
+                      <div className="p-4 text-center text-slate-600 italic">Aucune étape. Utilisez le catalogue à droite pour ajouter rapidement !</div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="pt-4 border-t border-slate-800 flex justify-end gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setIsEditingModalOpen(false)}
+                    className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg"
+                  >
+                    Annuler
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-4 py-2 bg-teal-600 hover:bg-teal-500 text-slate-950 font-bold rounded-lg shadow"
+                  >
+                    Enregistrer le Playbook
+                  </button>
+                </div>
+              </form>
+
+              {/* Right Column: Template appends panel */}
+              <div className="md:col-span-2 p-5 bg-slate-950 flex flex-col overflow-hidden text-xs">
+                <h4 className="font-bold text-slate-300 mb-2 uppercase tracking-wide flex items-center gap-1 font-mono shrink-0">
+                  <BookOpen className="w-4 h-4 text-teal-400" />
+                  Modèles de Commandes Rapides
+                </h4>
+                <p className="text-[11px] text-slate-500 mb-4 font-mono shrink-0">
+                  Cliquez sur un modèle ci-dessous pour l'injecter instantanément comme étape dans votre playbook à gauche.
+                </p>
+
+                <div className="flex-1 overflow-y-auto space-y-2.5 pr-1 custom-scrollbar">
+                  {TEMPLATE_SNIPPETS.map((snippet, idx) => (
+                    <div
+                      key={idx}
+                      onClick={() => handleAppendSnippet(snippet)}
+                      className="p-3 bg-slate-900 border border-slate-800 hover:border-teal-500/50 hover:bg-slate-900/60 rounded-lg cursor-pointer transition-all text-left font-mono"
+                    >
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="font-bold text-teal-300 text-xs">{snippet.title}</span>
+                        <span className="text-[10px] text-slate-500">+{snippet.delay}s delay</span>
+                      </div>
+                      <span className="text-[11px] text-slate-400 block truncate">{snippet.desc}</span>
+                      <code className="text-[10px] text-amber-500 block mt-1.5 truncate bg-slate-950 px-1.5 py-0.5 rounded border border-slate-900">
+                        {snippet.cmd}
+                      </code>
                     </div>
                   ))}
                 </div>
               </div>
-
-              <div className="pt-4 flex items-center justify-end gap-3 border-t border-slate-800 shrink-0">
-                <button
-                  type="button"
-                  onClick={() => setIsEditingModalOpen(false)}
-                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg"
-                >
-                  Annuler
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 bg-teal-600 hover:bg-teal-500 text-slate-950 font-bold rounded-lg shadow"
-                >
-                  Enregistrer
-                </button>
-              </div>
-            </form>
+            </div>
           </div>
         </div>
       )}

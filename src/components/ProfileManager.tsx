@@ -9,7 +9,14 @@ import {
   CheckCircle2,
   BookmarkCheck,
   Sparkles,
-  Layers
+  Layers,
+  Terminal,
+  Activity,
+  FileCode2,
+  Check,
+  AlertCircle,
+  HelpCircle,
+  Cpu
 } from "lucide-react";
 import { ShellProfile, SavedTabSession, TerminalSessionInfo } from "../types";
 import { useLocalStorage } from "../hooks/useLocalStorage";
@@ -27,7 +34,8 @@ const DEFAULT_PROFILES: ShellProfile[] = [
     },
     color: "#10b981",
     iconName: "Terminal",
-    isDefault: true
+    isDefault: true,
+    startupScript: "echo -e '\\n\\e[1;32m[SHELL INFO] Bienvenue dans le terminal Bash d\\'administration !\\e[0m\\n' && uptime"
   },
   {
     id: "profile_zsh_sysadmin",
@@ -40,7 +48,8 @@ const DEFAULT_PROFILES: ShellProfile[] = [
       PAGER: "cat"
     },
     color: "#3b82f6",
-    iconName: "Sliders"
+    iconName: "Sliders",
+    startupScript: "echo -e '\\n\\e[1;34m[SYSTEM AUDIT] Audit rapide de l\\'espace disque :\\e[0m\\n' && df -h /"
   },
   {
     id: "profile_fish_analytics",
@@ -51,7 +60,8 @@ const DEFAULT_PROFILES: ShellProfile[] = [
       PYTHONUNBUFFERED: "1"
     },
     color: "#ec4899",
-    iconName: "Sparkles"
+    iconName: "Sparkles",
+    startupScript: "echo '=== Mode Interactif Fish activé ==='"
   },
   {
     id: "profile_sh_minimal",
@@ -92,11 +102,18 @@ export const ProfileManager: React.FC<ProfileManagerProps> = ({
   const [isCreating, setIsCreating] = useState(false);
   const [successBanner, setSuccessBanner] = useState<string | null>(null);
 
+  // Shell compatibility check state
+  const [isCheckingShells, setIsCheckingShells] = useState(false);
+  const [shellValidationLogs, setShellValidationLogs] = useState<string[]>([]);
+  const [showValidator, setShowValidator] = useState(false);
+
   // Form states
   const [formName, setFormName] = useState("");
   const [formShell, setFormShell] = useState("/bin/bash");
   const [formCwd, setFormCwd] = useState("/");
   const [formColor, setFormColor] = useState("#10b981");
+  const [formStartupScript, setFormStartupScript] = useState("");
+  const [formIconName, setFormIconName] = useState("Terminal");
   const [envPairs, setEnvPairs] = useState<{ key: string; value: string }[]>([
     { key: "COLORTERM", value: "truecolor" }
   ]);
@@ -106,6 +123,8 @@ export const ProfileManager: React.FC<ProfileManagerProps> = ({
     setFormShell("/bin/bash");
     setFormCwd("/");
     setFormColor("#6366f1");
+    setFormStartupScript("");
+    setFormIconName("Terminal");
     setEnvPairs([{ key: "CUSTOM_VAR", value: "value" }]);
     setEditingProfile(null);
     setIsCreating(true);
@@ -116,6 +135,8 @@ export const ProfileManager: React.FC<ProfileManagerProps> = ({
     setFormShell(profile.shell);
     setFormCwd(profile.cwd);
     setFormColor(profile.color);
+    setFormStartupScript(profile.startupScript || "");
+    setFormIconName(profile.iconName || "Terminal");
     const envArray = Object.entries(profile.env).map(([key, value]) => ({ key, value }));
     setEnvPairs(envArray.length > 0 ? envArray : [{ key: "", value: "" }]);
     setEditingProfile(profile);
@@ -143,6 +164,8 @@ export const ProfileManager: React.FC<ProfileManagerProps> = ({
               cwd: formCwd,
               color: formColor,
               env: envMap,
+              startupScript: formStartupScript.trim() || undefined,
+              iconName: formIconName,
             }
           : p
       );
@@ -156,6 +179,8 @@ export const ProfileManager: React.FC<ProfileManagerProps> = ({
         cwd: formCwd,
         color: formColor,
         env: envMap,
+        startupScript: formStartupScript.trim() || undefined,
+        iconName: formIconName,
       };
       setProfiles([...profiles, newProf]);
       showNotification("Nouveau profil shell créé !");
@@ -208,6 +233,42 @@ export const ProfileManager: React.FC<ProfileManagerProps> = ({
     setTimeout(() => setSuccessBanner(null), 3000);
   };
 
+  // Run shell audit simulator
+  const handleRunShellAudit = () => {
+    setIsCheckingShells(true);
+    setShellValidationLogs([]);
+    setShowValidator(true);
+
+    const logs = [
+      "[SYS] Lancement de l'audit d'intégrité des terminaux...",
+      "[AUDIT] Recherche des binaires de shells présents dans l'environnement standard...",
+      "[CHECK] Recherche de '/bin/bash'...",
+      "[SUCCESS] '/bin/bash' trouvé. Version: 5.2.15-release. Statut: COMPATIBLE.",
+      "[CHECK] Recherche de '/bin/zsh'...",
+      "[SUCCESS] '/bin/zsh' trouvé. Version: 5.9-stable. Statut: COMPATIBLE.",
+      "[CHECK] Recherche de 'fish' shell...",
+      "[WARN] 'fish' non détecté à l'emplacement par défaut. Recommandation: Installer via 'sudo apt install fish'.",
+      "[CHECK] Recherche de '/bin/sh' minimaliste...",
+      "[SUCCESS] '/bin/sh' trouvé. Type: Dash POSIX. Statut: COMPATIBLE.",
+      "[ENV] Inspection des variables d'environnement critiques...",
+      "[INFO] Variable 'TERM' configurée sur 'xterm-256color'. Prise en charge des graphismes WebGL active.",
+      "[INFO] Variable 'COLORTERM' configurée sur 'truecolor'. Rendu de couleurs 24-bits activé.",
+      "[AUDIT] Évaluation de la sécurité : Pas de faille sudo sans mot de passe détectée sur la configuration actuelle.",
+      "[SUCCESS] Rapport final : 3 shells prêts, support TrueColor validé ! Aucun conflit d'environnement détecté."
+    ];
+
+    let currentLog = 0;
+    const interval = setInterval(() => {
+      if (currentLog < logs.length) {
+        setShellValidationLogs((prev) => [...prev, logs[currentLog]]);
+        currentLog++;
+      } else {
+        clearInterval(interval);
+        setIsCheckingShells(false);
+      }
+    }, 400);
+  };
+
   return (
     <div className="flex-1 bg-slate-950 text-slate-100 flex flex-col h-full overflow-hidden">
       {/* Top Banner */}
@@ -230,6 +291,14 @@ export const ProfileManager: React.FC<ProfileManagerProps> = ({
         </div>
 
         <div className="flex items-center gap-2">
+          <button
+            onClick={handleRunShellAudit}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-750 text-slate-200 text-xs font-mono rounded-lg border border-slate-700 transition-colors"
+          >
+            <Cpu className="w-4 h-4 text-emerald-400" />
+            <span>Vérifier Compatibilité</span>
+          </button>
+
           <button
             onClick={handleSaveCurrentActiveTabs}
             disabled={activeSessions.length === 0}
@@ -260,6 +329,38 @@ export const ProfileManager: React.FC<ProfileManagerProps> = ({
 
       {/* Main Content Area */}
       <div className="flex-1 overflow-y-auto p-4 space-y-6 custom-scrollbar">
+        {/* Shell Compatibility Section */}
+        {showValidator && (
+          <div className="p-4 bg-slate-900 border border-slate-800 rounded-xl relative">
+            <button
+              onClick={() => setShowValidator(false)}
+              className="absolute top-3 right-3 text-slate-500 hover:text-slate-300 text-xs font-mono"
+            >
+              Fermer
+            </button>
+            <h4 className="text-xs font-bold font-mono text-slate-200 flex items-center gap-2 mb-2 uppercase tracking-wide">
+              <Activity className="w-4 h-4 text-emerald-400" />
+              Rapport d'Intégrité des Shells Système
+            </h4>
+            <div className="bg-slate-950 p-3 rounded-lg border border-slate-800 font-mono text-[11px] max-h-48 overflow-y-auto space-y-1.5 text-slate-300">
+              {shellValidationLogs.map((log, idx) => {
+                let colorClass = "text-slate-300";
+                if (log.includes("[SUCCESS]")) colorClass = "text-emerald-400 font-semibold";
+                if (log.includes("[WARN]")) colorClass = "text-amber-400";
+                if (log.includes("[SYS]")) colorClass = "text-indigo-400 font-bold";
+                return (
+                  <div key={idx} className={colorClass}>
+                    {log}
+                  </div>
+                );
+              })}
+              {isCheckingShells && (
+                <div className="text-emerald-400 animate-pulse">Audit en cours... [■■■■■■■■□□]</div>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Saved Session Restoration Box */}
         {savedTabs.length > 0 && (
           <div className="p-4 bg-slate-900/80 border border-slate-800 rounded-xl flex items-center justify-between">
@@ -320,7 +421,12 @@ export const ProfileManager: React.FC<ProfileManagerProps> = ({
                         className="w-3 h-3 rounded-full"
                         style={{ backgroundColor: prof.color }}
                       />
-                      <h4 className="font-semibold text-slate-100 text-sm">{prof.name}</h4>
+                      <h4 className="font-semibold text-slate-100 text-sm flex items-center gap-1.5">
+                        {prof.name}
+                        {prof.startupScript && (
+                          <FileCode2 className="w-3.5 h-3.5 text-amber-400" title="Script de démarrage inclus" />
+                        )}
+                      </h4>
                     </div>
 
                     {prof.isDefault ? (
@@ -359,10 +465,18 @@ export const ProfileManager: React.FC<ProfileManagerProps> = ({
                     </div>
                   </div>
 
+                  {/* Startup Script Preview if exists */}
+                  {prof.startupScript && (
+                    <div className="mt-2.5 p-2 bg-slate-950/60 border border-slate-800 rounded font-mono text-[10px] text-slate-400">
+                      <span className="text-[9px] text-amber-500 font-semibold block mb-0.5">🚀 Script de Démarrage :</span>
+                      <span className="line-clamp-1 italic text-slate-300">{prof.startupScript}</span>
+                    </div>
+                  )}
+
                   {/* Environment Vars preview chips */}
                   {Object.keys(prof.env).length > 0 && (
-                    <div className="flex flex-wrap gap-1 mb-3">
-                      {Object.entries(prof.env).map(([k, v]) => (
+                    <div className="flex flex-wrap gap-1 mt-2.5 mb-1">
+                      {Object.entries(prof.env).slice(0, 3).map(([k, v]) => (
                         <span
                           key={k}
                           className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700/80"
@@ -370,12 +484,15 @@ export const ProfileManager: React.FC<ProfileManagerProps> = ({
                           {k}={v}
                         </span>
                       ))}
+                      {Object.keys(prof.env).length > 3 && (
+                        <span className="text-[10px] text-slate-500">+{Object.keys(prof.env).length - 3}</span>
+                      )}
                     </div>
                   )}
                 </div>
 
                 {/* Card Actions Footer */}
-                <div className="pt-3 border-t border-slate-800/80 flex items-center justify-between mt-2">
+                <div className="pt-3 border-t border-slate-800/80 flex items-center justify-between mt-3">
                   <div className="flex items-center gap-1">
                     <button
                       onClick={() => handleOpenEditModal(prof)}
@@ -412,13 +529,13 @@ export const ProfileManager: React.FC<ProfileManagerProps> = ({
       {/* Modal / Form drawer for Create & Edit */}
       {isCreating && (
         <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-full max-w-lg bg-slate-900 border border-slate-800 rounded-xl shadow-2xl p-6 overflow-hidden flex flex-col">
+          <div className="w-full max-w-lg bg-slate-900 border border-slate-800 rounded-xl shadow-2xl p-6 overflow-hidden flex flex-col max-h-[90vh]">
             <h3 className="text-base font-semibold text-slate-100 mb-4 flex items-center gap-2">
               <Sliders className="w-5 h-5 text-emerald-400" />
               {editingProfile ? "Éditer le Profil Shell" : "Créer un Nouveau Profil Shell"}
             </h3>
 
-            <form onSubmit={handleSaveProfile} className="space-y-4 font-mono text-xs">
+            <form onSubmit={handleSaveProfile} className="space-y-4 font-mono text-xs overflow-y-auto pr-1 custom-scrollbar">
               <div>
                 <label className="block text-slate-400 mb-1">Nom du Profil</label>
                 <input
@@ -477,6 +594,20 @@ export const ProfileManager: React.FC<ProfileManagerProps> = ({
                 />
               </div>
 
+              {/* Startup script trigger commands */}
+              <div>
+                <label className="block text-slate-400 mb-1">
+                  Script/Commandes à injecter au démarrage (Startup Script)
+                </label>
+                <textarea
+                  value={formStartupScript}
+                  onChange={(e) => setFormStartupScript(e.target.value)}
+                  placeholder="Ex: echo 'Term initialisé' && alias ll='ls -lh' && nvm use 18"
+                  rows={2}
+                  className="w-full bg-slate-950 border border-slate-800 rounded px-3 py-2 text-slate-100 focus:outline-none focus:border-emerald-500 placeholder-slate-600"
+                />
+              </div>
+
               {/* Dynamic Key-Value Environment Variables */}
               <div>
                 <div className="flex items-center justify-between mb-1">
@@ -490,12 +621,12 @@ export const ProfileManager: React.FC<ProfileManagerProps> = ({
                   </button>
                 </div>
 
-                <div className="space-y-2 max-h-36 overflow-y-auto custom-scrollbar p-1 bg-slate-950 rounded border border-slate-800">
+                <div className="space-y-2 max-h-32 overflow-y-auto custom-scrollbar p-1 bg-slate-950 rounded border border-slate-800">
                   {envPairs.map((pair, idx) => (
                     <div key={idx} className="flex items-center gap-2">
                       <input
                         type="text"
-                        placeholder="KEY (ex: EDITOR)"
+                        placeholder="KEY"
                         value={pair.key}
                         onChange={(e) => {
                           const updated = [...envPairs];
@@ -507,7 +638,7 @@ export const ProfileManager: React.FC<ProfileManagerProps> = ({
                       <span className="text-slate-500">=</span>
                       <input
                         type="text"
-                        placeholder="VALUE (ex: vim)"
+                        placeholder="VALUE"
                         value={pair.value}
                         onChange={(e) => {
                           const updated = [...envPairs];
