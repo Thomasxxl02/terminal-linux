@@ -6,7 +6,7 @@ authors = ["AI Studio Developer <dev@aistudio.build>"]
 edition = "2021"
 
 [build-dependencies]
-tauri-build = { version = "1.5", features = [] }
+tauri-build = { version = "2.6", features = [] }
 
 [dependencies]
 tauri = { version = "1.5", features = ["shell-open", "window-start-dragging", "dialog", "fs-all"] }
