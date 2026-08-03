@@ -37,10 +37,18 @@ const ptySessions = new Map<string, PtySession>();
 
 // Initialize WebSocket server for PTY stream
 const wss = new WebSocketServer({ noServer: true });
+const wssLogs = new WebSocketServer({ noServer: true });
 const HEARTBEAT_INTERVAL = 30000;
 
 const pingInterval = setInterval(() => {
   wss.clients.forEach((ws: WebSocket) => {
+    if ((ws as any).isAlive === false) {
+      return ws.terminate();
+    }
+    (ws as any).isAlive = false;
+    ws.ping();
+  });
+  wssLogs.clients.forEach((ws: WebSocket) => {
     if ((ws as any).isAlive === false) {
       return ws.terminate();
     }
@@ -54,6 +62,10 @@ server.on("upgrade", (request, socket, head) => {
   if (url.pathname.startsWith("/ws/pty")) {
     wss.handleUpgrade(request, socket, head, (ws) => {
       wss.emit("connection", ws, request);
+    });
+  } else if (url.pathname.startsWith("/ws/logs")) {
+    wssLogs.handleUpgrade(request, socket, head, (ws) => {
+      wssLogs.emit("connection", ws, request);
     });
   } else {
     socket.destroy();
@@ -121,6 +133,108 @@ wss.on("connection", (ws: WebSocket, request: http.IncomingMessage) => {
 
   ws.on("close", () => {
     session.clients.delete(ws);
+  });
+});
+
+// Robust, high-performance real-time log file tailer
+class LogTailer {
+  private filePath: string;
+  private ws: WebSocket;
+  private isWatching: boolean = false;
+  private watcher: NodeJS.Timeout | null = null;
+  private lastSize: number = 0;
+
+  constructor(filePath: string, ws: WebSocket) {
+    this.filePath = filePath;
+    this.ws = ws;
+  }
+
+  public async start() {
+    try {
+      // Ensure the directory exists
+      const dir = path.dirname(this.filePath);
+      if (!fs.existsSync(dir)) {
+        await fs.promises.mkdir(dir, { recursive: true });
+      }
+
+      // If the file doesn't exist, seed it with an initial greeting
+      if (!fs.existsSync(this.filePath)) {
+        await fs.promises.writeFile(
+          this.filePath,
+          `--- Initialisation du fichier de log : ${path.basename(this.filePath)} ---\n[INFO] ${new Date().toISOString()} Journal créé\n`,
+          "utf-8"
+        );
+      }
+
+      const stat = await fs.promises.stat(this.filePath);
+      this.lastSize = stat.size;
+      this.isWatching = true;
+
+      // Send recent history (last 50KB or 100 lines) to the client
+      const historySize = Math.min(stat.size, 50 * 1024);
+      if (historySize > 0) {
+        const fd = await fs.promises.open(this.filePath, "r");
+        const buf = Buffer.alloc(historySize);
+        await fd.read(buf, 0, historySize, stat.size - historySize);
+        await fd.close();
+        this.ws.send(JSON.stringify({ type: "history", data: buf.toString("utf-8") }));
+      }
+
+      // Check for file updates at 100ms intervals (extremely fast and CPU efficient)
+      this.watcher = setInterval(async () => {
+        if (!this.isWatching) return;
+        try {
+          if (!fs.existsSync(this.filePath)) return;
+          const currStat = await fs.promises.stat(this.filePath);
+          
+          if (currStat.size > this.lastSize) {
+            const addedSize = currStat.size - this.lastSize;
+            const buf = Buffer.alloc(addedSize);
+            const fd = await fs.promises.open(this.filePath, "r");
+            await fd.read(buf, 0, addedSize, this.lastSize);
+            await fd.close();
+            
+            this.lastSize = currStat.size;
+            this.ws.send(JSON.stringify({ type: "log", data: buf.toString("utf-8") }));
+          } else if (currStat.size < this.lastSize) {
+            // File truncated (log rotation)
+            this.lastSize = currStat.size;
+            this.ws.send(JSON.stringify({ type: "truncated" }));
+          }
+        } catch (e) {
+          // Silent catch to prevent server crashes on deleted or locked files
+        }
+      }, 100);
+
+      this.ws.send(JSON.stringify({ type: "status", status: "tailing", path: this.filePath }));
+    } catch (err: any) {
+      this.ws.send(JSON.stringify({ type: "error", message: err.message }));
+    }
+  }
+
+  public stop() {
+    this.isWatching = false;
+    if (this.watcher) {
+      clearInterval(this.watcher);
+      this.watcher = null;
+    }
+  }
+}
+
+wssLogs.on("connection", (ws: WebSocket, request: http.IncomingMessage) => {
+  (ws as any).isAlive = true;
+  ws.on("pong", () => {
+    (ws as any).isAlive = true;
+  });
+
+  const url = new URL(request.url || "", `http://${request.headers.host}`);
+  const logPath = url.searchParams.get("path") || "/tmp/application.log";
+
+  const tailer = new LogTailer(logPath, ws);
+  tailer.start();
+
+  ws.on("close", () => {
+    tailer.stop();
   });
 });
 
@@ -567,17 +681,286 @@ app.get("/api/fs/read", async (req, res) => {
 
 app.post("/api/fs/write", async (req, res) => {
   try {
-    const { path: filePath, content } = req.body;
+    const { path: filePath, content, encoding } = req.body;
     if (!filePath) {
       return res.status(400).json({ error: "Chemin de fichier requis" });
     }
 
-    await fs.promises.writeFile(filePath, content, "utf-8");
+    if (encoding === "base64") {
+      const buffer = Buffer.from(content, "base64");
+      await fs.promises.writeFile(filePath, buffer);
+    } else {
+      await fs.promises.writeFile(filePath, content, "utf-8");
+    }
     res.json({ success: true, message: "Fichier sauvegardé avec succès" });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
 });
+
+// Mock Remote File System dictionary for testing/demos
+const mockRemoteFs: Record<string, { content: string; isDirectory: boolean; size: number }> = {
+  "/var/www/html": { content: "", isDirectory: true, size: 0 },
+  "/var/www/html/index.html": {
+    content: `<!DOCTYPE html>
+<html>
+<head>
+  <title>Serveur Distant Nginx</title>
+  <style>
+    body { font-family: sans-serif; background: #0f172a; color: #f1f5f9; text-align: center; padding: 50px; }
+    h1 { color: #10b981; }
+  </style>
+</head>
+<body>
+  <h1>Félicitations!</h1>
+  <p>Le serveur Nginx fonctionne correctement sur votre hôte SSH distant.</p>
+</body>
+</html>`,
+    isDirectory: false,
+    size: 298
+  },
+  "/etc/nginx": { content: "", isDirectory: true, size: 0 },
+  "/etc/nginx/nginx.conf": {
+    content: `user nginx;
+worker_processes auto;
+error_log /var/log/nginx/error.log warn;
+pid /var/run/nginx.pid;
+
+events {
+    worker_connections 1024;
+}
+
+http {
+    include /etc/nginx/mime.types;
+    default_type application/octet-stream;
+    sendfile on;
+    keepalive_timeout 65;
+    include /etc/nginx/conf.d/*.conf;
+}`,
+    isDirectory: false,
+    size: 324
+  },
+  "/home/developer": { content: "", isDirectory: true, size: 0 },
+  "/home/developer/deploy.sh": {
+    content: `#!/bin/bash
+echo "Démarrage du déploiement..."
+npm run build
+pm2 restart all
+echo "Déploiement terminé avec succès!"`,
+    isDirectory: false,
+    size: 110
+  },
+  "/home/developer/README.md": {
+    content: `# Projet Distant SSH SFTP
+Ceci est un projet hébergé sur votre conteneur ou serveur distant.
+Vous pouvez éditer ce fichier directement via l'intégration Monaco de Terminal Studio !
+
+## Fonctionnalités
+- Édition en direct
+- Coloration syntaxique complète
+- Sauvegarde automatique en arrière-plan
+`,
+    isDirectory: false,
+    size: 280
+  }
+};
+
+// SFTP / SSH Filesystem APIs
+app.get("/api/fs/remote/tree", async (req, res) => {
+  try {
+    const targetDir = (req.query.path as string) || "/home/developer";
+    const host = req.query.host as string; // SSH host config if provided in query JSON
+    
+    let items: any[] = [];
+    let isMock = true;
+    
+    if (host) {
+      try {
+        const hostConfig = JSON.parse(host);
+        if (hostConfig && hostConfig.host && hostConfig.host !== "mock-ssh-host") {
+          // Attempt real SSH command
+          const pythonCommand = `python3 -c "import os, json; print(json.dumps([{'name': f, 'isDirectory': os.path.isdir(os.path.join('${targetDir}', f)), 'size': os.path.getsize(os.path.join('${targetDir}', f))} for f in os.listdir('${targetDir}')]))"`;
+          const stdout = await execSshCommand(hostConfig, pythonCommand);
+          items = JSON.parse(stdout).map((item: any) => ({
+            name: item.name,
+            path: path.posix.join(targetDir, item.name),
+            isDirectory: item.isDirectory,
+            size: item.size
+          }));
+          isMock = false;
+        }
+      } catch (err) {
+        console.warn("SSH connection failed or not configured, falling back to mock remote filesystem.", err);
+      }
+    }
+    
+    if (isMock) {
+      // List mock remote FS items matching the folder prefix
+      const normDir = targetDir.endsWith("/") ? targetDir : targetDir + "/";
+      const keys = Object.keys(mockRemoteFs);
+      const uniqueItems = new Map<string, any>();
+      
+      for (const k of keys) {
+        if (k.startsWith(normDir)) {
+          const subPath = k.slice(normDir.length);
+          const parts = subPath.split("/");
+          const name = parts[0];
+          if (!name) continue;
+          
+          const fullPath = path.posix.join(targetDir, name);
+          const isDir = parts.length > 1 || mockRemoteFs[fullPath]?.isDirectory;
+          
+          uniqueItems.set(name, {
+            name,
+            path: fullPath,
+            isDirectory: !!isDir,
+            size: isDir ? 0 : (mockRemoteFs[fullPath]?.size || 0)
+          });
+        }
+      }
+      
+      items = Array.from(uniqueItems.values());
+    }
+    
+    // Sort directories first
+    items.sort((a, b) => (b.isDirectory ? 1 : 0) - (a.isDirectory ? 1 : 0) || a.name.localeCompare(b.name));
+    
+    res.json({
+      currentPath: targetDir,
+      parentPath: targetDir === "/" ? "/" : path.posix.dirname(targetDir),
+      items,
+      isMock
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get("/api/fs/remote/read", async (req, res) => {
+  try {
+    const filePath = req.query.path as string;
+    const host = req.query.host as string;
+    
+    if (!filePath) {
+      return res.status(400).json({ error: "Chemin de fichier requis" });
+    }
+    
+    let content = "";
+    let isMock = true;
+    
+    if (host) {
+      try {
+        const hostConfig = JSON.parse(host);
+        if (hostConfig && hostConfig.host && hostConfig.host !== "mock-ssh-host") {
+          content = await execSshCommand(hostConfig, `cat "${filePath}"`);
+          isMock = false;
+        }
+      } catch (err) {
+        console.warn("SSH connection failed, falling back to mock read.", err);
+      }
+    }
+    
+    if (isMock) {
+      const item = mockRemoteFs[filePath];
+      if (!item || item.isDirectory) {
+        return res.status(404).json({ error: "Fichier distant introuvable" });
+      }
+      content = item.content;
+    }
+    
+    res.json({
+      path: filePath,
+      name: path.posix.basename(filePath),
+      content,
+      extension: path.posix.extname(filePath).slice(1),
+      isMock
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/api/fs/remote/write", async (req, res) => {
+  try {
+    const { path: filePath, content, host } = req.body;
+    if (!filePath) {
+      return res.status(400).json({ error: "Chemin de fichier requis" });
+    }
+    
+    let isMock = true;
+    
+    if (host) {
+      try {
+        const hostConfig = typeof host === "string" ? JSON.parse(host) : host;
+        if (hostConfig && hostConfig.host && hostConfig.host !== "mock-ssh-host") {
+          await writeSshFile(hostConfig, filePath, content);
+          isMock = false;
+        }
+      } catch (err) {
+        console.warn("SSH connection failed, falling back to mock write.", err);
+      }
+    }
+    
+    if (isMock) {
+      mockRemoteFs[filePath] = {
+        content: content || "",
+        isDirectory: false,
+        size: (content || "").length
+      };
+      
+      // Ensure parent directory is also in mock remote FS
+      const parent = path.posix.dirname(filePath);
+      if (parent && parent !== "/" && !mockRemoteFs[parent]) {
+        mockRemoteFs[parent] = { content: "", isDirectory: true, size: 0 };
+      }
+    }
+    
+    res.json({ success: true, message: "Fichier distant enregistré avec succès", isMock });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Helper for SSH remote file writing
+function writeSshFile(hostConfig: any, filePath: string, content: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    let sshCmd = `ssh -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=3 -p ${hostConfig.port || 22} `;
+    if (hostConfig.privateKeyPath) {
+      sshCmd += `-i "${hostConfig.privateKeyPath}" `;
+    }
+    sshCmd += `${hostConfig.username}@${hostConfig.host} "cat > \\"${filePath}\\""`;
+    
+    const proc = exec(sshCmd, (err, stdout, stderr) => {
+      if (err) {
+        reject(new Error(stderr || err.message));
+      } else {
+        resolve();
+      }
+    });
+    
+    proc.stdin?.write(content);
+    proc.stdin?.end();
+  });
+}
+
+// Helper for SSH command execution
+function execSshCommand(hostConfig: any, command: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    let sshCmd = `ssh -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=3 -p ${hostConfig.port || 22} `;
+    if (hostConfig.privateKeyPath) {
+      sshCmd += `-i "${hostConfig.privateKeyPath}" `;
+    }
+    sshCmd += `${hostConfig.username}@${hostConfig.host} "${command.replace(/"/g, '\\"')}"`;
+    
+    exec(sshCmd, (err, stdout, stderr) => {
+      if (err) {
+        reject(new Error(stderr || err.message));
+      } else {
+        resolve(stdout);
+      }
+    });
+  });
+}
 
 app.post("/api/fs/create-file", async (req, res) => {
   try {
@@ -892,7 +1275,60 @@ impl PtyManager {
   });
 });
 
+// Generates simulated live logs for /tmp/application.log to show rich real-time tailing
+const SIMULATED_LOG_FILE = "/tmp/application.log";
+function startSimulatedLogs() {
+  try {
+    const dir = path.dirname(SIMULATED_LOG_FILE);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    fs.writeFileSync(SIMULATED_LOG_FILE, "--- Émulateur Linux - Initialisation du Journal d'Application ---\n[SUCCESS] Système démarré avec succès en mode asynchrone\n");
+    
+    const logs = [
+      "[INFO] 200 GET /api/health - En attente de requêtes",
+      "[INFO] 200 GET /api/pty/sessions - 1 sessions actives",
+      "[WARN] 404 GET /assets/favicon-old.ico - Ressource non trouvée",
+      "[SUCCESS] 101 Connection Upgrade - PTY terminal WebSocket connecté",
+      "[INFO] Processus de maintenance apt-clean démarré",
+      "[SUCCESS] Cache utilisateur nettoyé avec succès en 42ms",
+      "[INFO] Surveillance CPU: usage moyen 14.2% sur 4 vCPUs",
+      "[WARN] Consommation RAM élevée: 82% d'utilisation sur l'hôte",
+      "[ERROR] 500 POST /api/fs/delete - Erreur de permission sur /root/.bashrc",
+      "[INFO] Tâche de nettoyage cron démarrée pour la purge des logs",
+      "[SUCCESS] Purge effectuée: 14.5Mo libérés sur le disque",
+      "[ERROR] Connexion SSH échouée: Connection timeout pour l'hôte 192.168.1.50:22",
+      "[INFO] Tentative de reconnexion au tunnel SSH dynamique port 8080...",
+      "[SUCCESS] Tunnel SSH établi avec succès pour la session #42",
+      "[INFO] 200 GET /api/system/stats - Télémétries actualisées",
+    ];
+
+    setInterval(() => {
+      const now = new Date().toISOString().replace('T', ' ').slice(0, 19);
+      const randomLog = logs[Math.floor(Math.random() * logs.length)];
+      const line = `[${now}] ${randomLog}\n`;
+      try {
+        fs.appendFileSync(SIMULATED_LOG_FILE, line);
+        
+        // Truncate file if it gets too large (> 500 lines) to save memory
+        const content = fs.readFileSync(SIMULATED_LOG_FILE, "utf-8");
+        const lines = content.split("\n");
+        if (lines.length > 500) {
+          fs.writeFileSync(SIMULATED_LOG_FILE, lines.slice(lines.length - 200).join("\n"));
+        }
+      } catch (err) {
+        console.error("Failed to write simulated logs:", err);
+      }
+    }, 2000);
+  } catch (e) {
+    console.error("Failed to initialize simulated logs", e);
+  }
+}
+
 async function startServer() {
+  // Start the background log simulator
+  startSimulatedLogs();
+
   // Vite middleware setup
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({

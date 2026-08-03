@@ -17,7 +17,8 @@ import {
   Layers,
   Key,
   Zap,
-  Sparkles
+  Sparkles,
+  FileText
 } from "lucide-react";
 import { TerminalSessionInfo, SystemStats } from "../types";
 
@@ -50,6 +51,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: "playbooks", label: "Automation Playbooks", icon: Layers },
     { id: "maintenance", label: "Maintenance Système", icon: Wrench },
     { id: "monaco", label: "Éditeur Monaco", icon: FileCode },
+    { id: "logs", label: "Visualiseur de Logs", icon: FileText },
     { id: "tauri", label: "Architectures", icon: Box },
     { id: "skills", label: "Skills / Fonctions", icon: Sparkles },
     { id: "snippets", label: "Bibliothèque Snippets", icon: Bookmark },

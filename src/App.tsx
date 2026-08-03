@@ -12,6 +12,7 @@ import { ProfileManager } from "./components/ProfileManager";
 import { PlaybookSequencer } from "./components/PlaybookSequencer";
 import { SshHostManager } from "./components/SshHostManager";
 import { SshTunnelManager } from "./components/SshTunnelManager";
+import { LogsStreamer } from "./components/LogsStreamer";
 import { TerminalSessionInfo, SystemStats, ShellProfile, SavedTabSession, SshHost } from "./types";
 
 const MonacoFileEditor = lazy(() =>
@@ -455,6 +456,8 @@ export default function App() {
             />
           </Suspense>
         )}
+
+        {activeView === "logs" && <LogsStreamer />}
 
         {activeView === "tauri" && <TauriRustArchitect />}
 
