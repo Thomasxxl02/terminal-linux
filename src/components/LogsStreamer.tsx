@@ -45,6 +45,7 @@ export const LogsStreamer: React.FC = () => {
   const wsRef = useRef<WebSocket | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const lineIdCounterRef = useRef<number>(0);
+  const isPausedRef = useRef<boolean>(false);
 
   // Parse raw log lines into structured data with high accuracy
   const parseLogLine = (rawLine: string): LogLine => {
@@ -120,7 +121,7 @@ export const LogsStreamer: React.FC = () => {
             const parsed = rawLines.map((l: string) => parseLogLine(l));
             
             setLines((prev) => {
-              if (isPaused) return prev;
+              if (isPausedRef.current) return prev;
               const combined = [...prev, ...parsed];
               // Cap history at 2000 lines for solid client-side performance
               return combined.slice(-2000);
@@ -168,7 +169,11 @@ export const LogsStreamer: React.FC = () => {
 
   // Handle Pause toggle
   const togglePause = () => {
-    setIsPaused(!isPaused);
+    setIsPaused((prev) => {
+      const next = !prev;
+      isPausedRef.current = next;
+      return next;
+    });
   };
 
   // Clear current log lines list

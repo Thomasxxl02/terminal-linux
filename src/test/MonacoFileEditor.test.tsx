@@ -67,8 +67,8 @@ describe("MonacoFileEditor Component", () => {
       render(<MonacoFileEditor onExecuteInTerminal={mockExecuteInTerminal} />);
     });
 
-    expect(screen.getByText(/Monaco Code & File Editor/i)).toBeInTheDocument();
-    expect(screen.getByText(/Sélectionnez n'importe quel fichier/i)).toBeInTheDocument();
+    expect(screen.getByText(/Aucun fichier actif sélectionné/i)).toBeInTheDocument();
+    expect(screen.getByText(/Sélectionnez un fichier local ou SFTP/i)).toBeInTheDocument();
   });
 
   it("loads and displays the directory tree items", async () => {
@@ -138,12 +138,13 @@ describe("MonacoFileEditor Component", () => {
     const settingsButton = screen.getByTitle("Paramètres de l'éditeur");
     fireEvent.click(settingsButton);
 
-    expect(screen.getByText("Paramètres Éditeur")).toBeInTheDocument();
-    expect(screen.getByText("Taille de police")).toBeInTheDocument();
-    expect(screen.getByText("Thème de l'éditeur")).toBeInTheDocument();
+    expect(screen.getByText("Police")).toBeInTheDocument();
+    expect(screen.getByText("Retour à la ligne")).toBeInTheDocument();
+    expect(screen.getByText("Minimap")).toBeInTheDocument();
+    expect(screen.getByText("Sauvegarde Auto")).toBeInTheDocument();
   });
 
-  it("submits command execution on clicking 'Cat dans Terminal'", async () => {
+  it("submits command execution on clicking 'Exécuter dans le PTY'", async () => {
     await act(async () => {
       render(<MonacoFileEditor onExecuteInTerminal={mockExecuteInTerminal} />);
     });
@@ -155,10 +156,10 @@ describe("MonacoFileEditor Component", () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByText(/Cat dans Terminal/i)).toBeInTheDocument();
+      expect(screen.getByText(/Exécuter dans le PTY/i)).toBeInTheDocument();
     });
 
-    const catBtn = screen.getByText(/Cat dans Terminal/i);
+    const catBtn = screen.getByText(/Exécuter dans le PTY/i);
     fireEvent.click(catBtn);
 
     expect(mockExecuteInTerminal).toHaveBeenCalledWith('cat "/workspace/app.ts"');
