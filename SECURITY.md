@@ -37,6 +37,10 @@ Les protections suivantes sont implémentées dans le code source (vérifiables 
 * Override forcée de `dompurify` vers la version patchée (`3.4.13`) dans `package.json`.
 * `SECURITY.md` vérifié par Dependabot sur les dépendances npm et crates Rust.
 
+### 7. Stockage sécurisé des secrets (desktop)
+* `src/backend/secrets.rs` (Rust) : commandes `secure_set` / `secure_get` / `secure_delete` basées sur le crate `keyring` — les secrets (hôtes SSH, profils shell) sont stockés dans le **keyring OS** (GNOME Keyring / macOS Keychain / Windows Credential Manager), pas dans le navigateur.
+* Frontend : `useSecureStorage` (chargement async) pour les données sensibles ; `useLocalStorage` ne fait **plus de fausse obfuscation XOR** — il stocke en clair et est documenté comme non sécurisé (à n'utiliser que pour des données non confidentielles).
+
 ---
 
 ## ⚠️ Limitations connues (à prendre en compte)

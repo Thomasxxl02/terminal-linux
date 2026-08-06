@@ -33,7 +33,6 @@ import { TERMINAL_THEMES } from "../constants/themes";
 import { encryptValue, decryptValue } from "../hooks/useLocalStorage";
 import { apiFetch, wsUrlWithToken } from "../lib/api";
 import { isTauri, tauriInvoke, tauriListen, PtyOutputEvent } from "../lib/tauri";
-
 interface TerminalViewProps {
   session: TerminalSessionInfo;
   activeThemeId: string;
@@ -92,13 +91,12 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
   const currentTheme =
     TERMINAL_THEMES.find((t) => t.id === activeThemeId) || TERMINAL_THEMES[0];
 
-  // Load history from localStorage on mount
+  // Load history from localStorage on mount (historique non sensible — clair)
   useEffect(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY_HISTORY);
       if (saved) {
-        const decrypted = decryptValue(saved);
-        setCommandHistory(JSON.parse(decrypted));
+        setCommandHistory(JSON.parse(saved));
       } else {
         const defaultHistory = [
           "apt update && apt upgrade -y",
@@ -112,7 +110,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
         ];
         setCommandHistory(defaultHistory);
         const serialized = JSON.stringify(defaultHistory);
-        localStorage.setItem(STORAGE_KEY_HISTORY, encryptValue(serialized));
+        localStorage.setItem(STORAGE_KEY_HISTORY, serialized);
       }
     } catch {
       // Ignore localStorage errors
@@ -127,7 +125,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       const updated = [trimmed, ...filtered].slice(0, 50); // Keep max 50 items
       try {
         const serialized = JSON.stringify(updated);
-        localStorage.setItem(STORAGE_KEY_HISTORY, encryptValue(serialized));
+        localStorage.setItem(STORAGE_KEY_HISTORY, serialized);
       } catch {}
       return updated;
     });

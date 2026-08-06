@@ -25,7 +25,7 @@ import {
   Code
 } from "lucide-react";
 import { SshHost, TerminalSessionInfo } from "../types";
-import { useLocalStorage } from "../hooks/useLocalStorage";
+import { useSecureStorage } from "../hooks/useSecureStorage";
 import { Tooltip } from "./Tooltip";
 import { ConfirmationModal } from "./ConfirmationModal";
 
@@ -113,7 +113,10 @@ export const SshHostManager: React.FC<SshHostManagerProps> = ({
   sessions,
   activeSessionId,
 }) => {
-  const [hosts, setHosts] = useLocalStorage<SshHost[]>(STORAGE_KEY_SSH, DEFAULT_SSH_HOSTS);
+  const { value: hostsValue, loading: hostsLoading, setValue: setHosts } =
+    useSecureStorage<SshHost[]>(STORAGE_KEY_SSH, DEFAULT_SSH_HOSTS);
+  // Pendant le chargement async du keyring, on affiche les hôtes par défaut
+  const hosts = hostsValue ?? DEFAULT_SSH_HOSTS;
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [editingHost, setEditingHost] = useState<SshHost | null>(null);

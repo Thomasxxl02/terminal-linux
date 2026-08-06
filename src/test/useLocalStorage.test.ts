@@ -1,6 +1,6 @@
 import { renderHook, act } from '@testing-library/react';
 import { describe, it, expect, beforeEach } from 'vitest';
-import { useLocalStorage, encryptValue, decryptValue } from '../hooks/useLocalStorage';
+import { useLocalStorage } from '../hooks/useLocalStorage';
 
 describe('useLocalStorage Hook', () => {
   beforeEach(() => {
@@ -41,20 +41,8 @@ describe('useLocalStorage Hook', () => {
     expect(window.localStorage.getItem('counter_key')).toBe(JSON.stringify(15));
   });
 
-  describe('Security and Encryption / Obfuscation', () => {
-    it('should correctly encrypt and decrypt strings using the XOR cipher', () => {
-      const plaintext = JSON.stringify({ host: '192.168.1.1', user: 'admin' });
-      const encrypted = encryptValue(plaintext);
-      
-      // The encrypted string should be obfuscated (not plain JSON)
-      expect(encrypted).not.toBe(plaintext);
-      expect(encrypted).not.toContain('192.168.1.1');
-      
-      const decrypted = decryptValue(encrypted);
-      expect(decrypted).toBe(plaintext);
-    });
-
-    it('should obfuscate sensitive keys when stored in localStorage', () => {
+  describe('Security : plus de fausse obfuscation XOR', () => {
+    it('useLocalStorage stocke en clair (documenté — non sécurisé par design)', () => {
       const sensitiveData = [{ host: 'secure.server.com', keyPath: '/root/.ssh/id_rsa' }];
       const { result } = renderHook(() => useLocalStorage('terminal_ssh_hosts', sensitiveData));
 
@@ -65,12 +53,12 @@ describe('useLocalStorage Hook', () => {
       const rawStored = window.localStorage.getItem('terminal_ssh_hosts');
       expect(rawStored).toBeDefined();
       expect(rawStored).not.toBeNull();
-      
-      // Should not be stored in cleartext JSON
-      expect(rawStored).not.toContain('secure.server.com');
-      expect(rawStored).not.toContain('/root/.ssh/id_rsa');
 
-      // But hook should still retrieve and decrypt it correctly
+      // Clair : le hook ne prétend plus protéger — les données sensibles
+      // doivent passer par useSecureStorage (keyring OS en Tauri)
+      expect(rawStored).toContain('secure.server.com');
+
+      // Le hook relit correctement ce qu'il a écrit
       const { result: retrieveHook } = renderHook(() => useLocalStorage('terminal_ssh_hosts', []));
       expect(retrieveHook.current[0]).toEqual(sensitiveData);
     });

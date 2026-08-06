@@ -19,7 +19,7 @@ import {
   Cpu
 } from "lucide-react";
 import { ShellProfile, SavedTabSession, TerminalSessionInfo } from "../types";
-import { useLocalStorage } from "../hooks/useLocalStorage";
+import { useSecureStorage } from "../hooks/useSecureStorage";
 import { Tooltip } from "./Tooltip";
 import { ConfirmationModal } from "./ConfirmationModal";
 
@@ -92,14 +92,16 @@ export const ProfileManager: React.FC<ProfileManagerProps> = ({
   activeSessions,
   onRestoreSavedTabs,
 }) => {
-  const [profiles, setProfiles] = useLocalStorage<ShellProfile[]>(
+  const { value: profilesValue, setValue: setProfiles } = useSecureStorage<ShellProfile[]>(
     STORAGE_KEY_PROFILES,
     DEFAULT_PROFILES
   );
-  const [savedTabs, setSavedTabs] = useLocalStorage<SavedTabSession[]>(
+  const profiles = profilesValue ?? DEFAULT_PROFILES;
+  const { value: savedTabsValue, setValue: setSavedTabs } = useSecureStorage<SavedTabSession[]>(
     STORAGE_KEY_SAVED_TABS,
     []
   );
+  const savedTabs = savedTabsValue ?? [];
   const [editingProfile, setEditingProfile] = useState<ShellProfile | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);

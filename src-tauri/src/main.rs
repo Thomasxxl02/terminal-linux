@@ -5,8 +5,10 @@
 
 mod commands;
 mod pty;
+mod secrets;
 
 use commands::*;
+use secrets::*;
 
 fn main() {
     env_logger::init();
@@ -18,7 +20,10 @@ fn main() {
             write_pty_input,
             resize_pty_session,
             close_pty_session,
-            get_system_stats
+            get_system_stats,
+            secure_set,
+            secure_get,
+            secure_delete
         ])
         .run(tauri::generate_context!())
         .expect("Erreur lors du démarrage de l'application Tauri & Rust Terminal");

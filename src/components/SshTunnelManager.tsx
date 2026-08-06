@@ -31,6 +31,7 @@ import {
   Sparkles
 } from "lucide-react";
 import { SshHost, SshTunnel, TerminalSessionInfo } from "../types";
+import { useSecureStorage } from "../hooks/useSecureStorage";
 import { useLocalStorage } from "../hooks/useLocalStorage";
 
 const STORAGE_KEY_SSH = "terminal_ssh_hosts";
@@ -140,7 +141,8 @@ export const SshTunnelManager: React.FC<SshTunnelManagerProps> = ({
   sessions,
   activeSessionId,
 }) => {
-  const [hosts] = useLocalStorage<SshHost[]>(STORAGE_KEY_SSH, DEFAULT_SSH_HOSTS);
+  const { value: hostsValue } = useSecureStorage<SshHost[]>(STORAGE_KEY_SSH, DEFAULT_SSH_HOSTS);
+  const hosts = hostsValue ?? DEFAULT_SSH_HOSTS;
   const [tunnels, setTunnels] = useLocalStorage<SshTunnel[]>(STORAGE_KEY_TUNNELS, DEFAULT_TUNNELS);
 
   // Filter & UI state
