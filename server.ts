@@ -23,61 +23,55 @@ app.set("trust proxy", 1);
 // Express setup
 app.use(express.json());
 
+// Journalisation réelle des requêtes (méthode, chemin, statut final)
+app.use((req, res, next) => {
+  res.on("finish", () => {
+    logRequest(req.method, req.originalUrl, res.statusCode);
+  });
+  next();
+});
+
 // Main modular routing delegation (HTTP logic separated!)
 app.use("/api", router);
 
 // Websockets initialization (Sync/WS logic separated!)
 const { pingInterval } = setupWebSockets(server);
 
-// Background Live Log Simulator
-const SIMULATED_LOG_FILE = "/tmp/application.log";
-function startSimulatedLogs() {
+// Journal d'application RÉEL : chaque requête HTTP qui traverse le serveur
+// Express est consignée dans /tmp/application.log (méthode, chemin, statut).
+// Aucune ligne fictive — contrairement à l'ancien simulateur qui inventait
+// des événements (tunnels SSH, purges disque…) présentés comme réels.
+const APP_LOG_FILE = "/tmp/application.log";
+
+export function initAppLog() {
   try {
-    const dir = path.dirname(SIMULATED_LOG_FILE);
+    const dir = path.dirname(APP_LOG_FILE);
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
     }
     fs.writeFileSync(
-      SIMULATED_LOG_FILE,
-      "--- Émulateur Linux - Initialisation du Journal d'Application ---\n[SUCCESS] Système démarré avec succès en mode asynchrone\n"
+      APP_LOG_FILE,
+      `--- Serveur Express démarré le ${new Date().toISOString()} ---\n`
     );
-
-    const logs = [
-      "[INFO] 200 GET /api/health - En attente de requêtes",
-      "[INFO] 200 GET /api/pty/sessions - 1 sessions actives",
-      "[WARN] 404 GET /assets/favicon-old.ico - Ressource non trouvée",
-      "[SUCCESS] 101 Connection Upgrade - PTY terminal WebSocket connecté",
-      "[INFO] Processus de maintenance apt-clean démarré",
-      "[SUCCESS] Cache utilisateur nettoyé avec succès en 42ms",
-      "[INFO] Surveillance CPU: usage moyen 14.2% sur 4 vCPUs",
-      "[WARN] Consommation RAM élevée: 82% d'utilisation sur l'hôte",
-      "[ERROR] 500 POST /api/fs/delete - Erreur de permission sur /root/.bashrc",
-      "[INFO] Tâche de nettoyage cron démarrée pour la purge des logs",
-      "[SUCCESS] Purge effectuée: 14.5Mo libérés sur le disque",
-      "[ERROR] Connexion SSH échouée: Connection timeout pour l'hôte 192.168.1.50:22",
-      "[INFO] Tentative de reconnexion au tunnel SSH dynamique port 8080...",
-      "[SUCCESS] Tunnel SSH établi avec succès pour la session #42",
-      "[INFO] 200 GET /api/system/stats - Télémétries actualisées",
-    ];
-
-    setInterval(() => {
-      const now = new Date().toISOString().replace("T", " ").slice(0, 19);
-      const randomLog = logs[Math.floor(Math.random() * logs.length)];
-      const line = `[${now}] ${randomLog}\n`;
-      try {
-        fs.appendFileSync(SIMULATED_LOG_FILE, line);
-
-        const content = fs.readFileSync(SIMULATED_LOG_FILE, "utf-8");
-        const lines = content.split("\n");
-        if (lines.length > 500) {
-          fs.writeFileSync(SIMULATED_LOG_FILE, lines.slice(lines.length - 200).join("\n"));
-        }
-      } catch (err) {
-        console.error("Failed to write simulated logs:", err);
-      }
-    }, 2000);
   } catch (e) {
-    console.error("Failed to initialize simulated logs", e);
+    console.error("Failed to initialize app log", e);
+  }
+}
+
+export function logRequest(method: string, url: string, statusCode: number) {
+  try {
+    const now = new Date().toISOString().replace("T", " ").slice(0, 19);
+    const line = `[${now}] [INFO] ${statusCode} ${method.toUpperCase()} ${url}\n`;
+    fs.appendFileSync(APP_LOG_FILE, line);
+
+    // Rotation simple : on garde les 200 dernières lignes
+    const content = fs.readFileSync(APP_LOG_FILE, "utf-8");
+    const lines = content.split("\n");
+    if (lines.length > 500) {
+      fs.writeFileSync(APP_LOG_FILE, lines.slice(lines.length - 200).join("\n"));
+    }
+  } catch {
+    // Journal indisponible (permissions) → on n'interrompt pas le serveur
   }
 }
 
@@ -85,8 +79,8 @@ async function startServer() {
   // (Initialisation PostgreSQL supprimée : db.ts retiré — le frontend
   //  utilise localStorage/keyring, aucune table n'est requise.)
 
-  // Start background logging
-  startSimulatedLogs();
+  // Journal d'application réel (requêtes serveur consignées)
+  initAppLog();
 
   // Vite development middleware vs production bundle static serving
   if (process.env.NODE_ENV !== "production") {

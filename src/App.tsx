@@ -65,6 +65,19 @@ export default function App() {
   // Rôle réactif (mis à jour au login/logout pour le badge Sidebar)
   const [userRole, setUserRole] = useState<string | null>(() => getRole());
 
+  // Mode Tauri : pas de serveur HTTP → l'authentification JWT n'a pas de
+  // sens (les commandes Rust sont locales et ne vérifient aucun token).
+  // L'écran de connexion est désactivé pour ne pas bloquer l'app (le login
+  // ferait un fetch vers /api/auth/login qui n'existe pas en desktop).
+  useEffect(() => {
+    if (isTauri()) {
+      setAuthRequired(false);
+      setAuthChecked(true);
+      clearAuth();
+      setUserRole(null);
+    }
+  }, []);
+
   // File path state to open directly into Monaco Editor
   const [monacoFilePath, setMonacoFilePath] = useState<string>("");
 
@@ -197,8 +210,16 @@ export default function App() {
     fetchSystemStats();
   }, [fetchSessions, fetchSystemStats]);
 
-  // Logout : révoque le JWT (blacklist serveur) et retourne à l'écran de connexion
+  // Logout : révoque le JWT (blacklist serveur) et retourne à l'écran de connexion.
+  // En mode Tauri, l'auth est désactivée → on ne ré-affiche pas AuthScreen.
   const handleLogout = useCallback(async () => {
+    if (isTauri()) {
+      // Pas de serveur : nettoyage local uniquement, l'app reste accessible
+      clearAuth();
+      setUserRole(null);
+      setSessions([]);
+      return;
+    }
     await logout();
     setUserRole(null);
     setAuthRequired(true);

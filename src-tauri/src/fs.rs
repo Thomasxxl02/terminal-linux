@@ -121,6 +121,51 @@ pub fn fs_read(path: String) -> Result<FsFile, String> {
     })
 }
 
+/// Lit les N derniers octets d'un fichier de log (tail réel, pas simulé).
+/// Retourne le contenu + la taille totale pour permettre au frontend de
+/// calculer les nouveaux octets au prochain polling (LogsStreamer Tauri).
+#[tauri::command]
+pub fn tail_log_file(path: String, max_bytes: Option<u64>) -> Result<LogTail, String> {
+    let p = PathBuf::from(&path);
+    if !p.exists() {
+        return Err("Fichier non trouvé".into());
+    }
+    if p.is_dir() {
+        return Err("Le chemin spécifié est un dossier, pas un fichier".into());
+    }
+
+    let meta = fs::metadata(&p).map_err(|e| e.to_string())?;
+    let total_size = meta.len();
+    if total_size == 0 {
+        return Ok(LogTail {
+            total_size: 0,
+            content: String::new(),
+        });
+    }
+
+    let limit = max_bytes.unwrap_or(50 * 1024).min(2 * 1024 * 1024);
+    let offset = total_size.saturating_sub(limit);
+    let read_len = (total_size - offset) as usize;
+
+    let f = fs::File::open(&p).map_err(|e| e.to_string())?;
+    use std::io::{Read, Seek, SeekFrom};
+    let mut f = f;
+    f.seek(SeekFrom::Start(offset)).map_err(|e| e.to_string())?;
+    let mut buf = vec![0u8; read_len];
+    f.read_exact(&mut buf).map_err(|e| e.to_string())?;
+
+    Ok(LogTail {
+        total_size,
+        content: String::from_utf8_lossy(&buf).to_string(),
+    })
+}
+
+#[derive(Serialize, Debug)]
+pub struct LogTail {
+    pub total_size: u64,
+    pub content: String,
+}
+
 #[tauri::command]
 pub fn fs_write(path: String, content: String, encoding: Option<String>) -> Result<(), String> {
     let p = PathBuf::from(&path);
@@ -276,4 +321,46 @@ pub fn check_shells() -> Result<Vec<serde_json::Value>, String> {
     results.push(serde_json::json!({ "name": "env", "path": "", "present": true, "version": format!("TERM={} COLORTERM={}", term, colorterm) }));
 
     Ok(results)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn temp_log(name: &str, content: &str) -> std::path::PathBuf {
+        let path = std::env::temp_dir().join(format!("fs-test-{}-{}.log", std::process::id(), name));
+        std::fs::write(&path, content).unwrap();
+        path
+    }
+
+    #[test]
+    fn tail_log_file_lit_la_fin_du_fichier() {
+        let path = temp_log("fin", "ligne1\nligne2\nligne3\n");
+        let tail = tail_log_file(path.to_string_lossy().to_string(), Some(10)).unwrap();
+        assert_eq!(tail.total_size, 21); // "ligne1\nligne2\nligne3\n" = 7+7+7
+        // 10 derniers octets → "ligne2\nligne3\n" partiel couvrant ligne3
+        assert!(tail.content.contains("ligne3"));
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn tail_log_file_retourne_erreur_si_fichier_absent() {
+        let err = tail_log_file("/tmp/fichier-inexistant-xyz.log".into(), None).unwrap_err();
+        assert!(err.contains("non trouvé"));
+    }
+
+    #[test]
+    fn tail_log_file_gere_fichier_vide() {
+        let path = temp_log("vide", "");
+        let tail = tail_log_file(path.to_string_lossy().to_string(), None).unwrap();
+        assert_eq!(tail.total_size, 0);
+        assert_eq!(tail.content, "");
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn tail_log_file_refuse_un_dossier() {
+        let err = tail_log_file(std::env::temp_dir().to_string_lossy().to_string(), None).unwrap_err();
+        assert!(err.contains("dossier"));
+    }
 }

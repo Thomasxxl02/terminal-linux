@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState, useMemo } from "react";
 import { wsUrlWithToken } from "../lib/api";
+import { isTauri, tailLogFileWeb } from "../lib/tauri";
 import { errMsg } from "../lib/errors";
 import {
   Play,
@@ -26,7 +27,7 @@ interface LogLine {
 }
 
 const PRESET_FILES = [
-  { label: "Journal d'Application (Simulé)", path: "/tmp/application.log" },
+  { label: "Journal d'Application (Requêtes Serveur)", path: "/tmp/application.log" },
   { label: "Système Général (Syslog)", path: "/var/log/syslog" },
   { label: "Dpkg Installation", path: "/var/log/dpkg.log" },
   { label: "Nginx Accès", path: "/var/log/nginx/access.log" },
@@ -160,7 +161,71 @@ export const LogsStreamer: React.FC = () => {
     }
   };
 
+  // ── Mode Tauri : pas de serveur HTTP → lecture directe du fichier via
+  //    la commande Rust tail_log_file (polling 1 s, offset suivi). ──
+  const tauriLastSizeRef = useRef<number>(0);
   useEffect(() => {
+    if (!isTauri()) return;
+    let cancelled = false;
+
+    const poll = async () => {
+      try {
+        const tail = await tailLogFileWeb(logPath, 50 * 1024);
+        if (cancelled || isPausedRef.current) return;
+
+        if (tail.total_size < tauriLastSizeRef.current) {
+          // Fichier tronqué (rotation) → on relit depuis le début
+          tauriLastSizeRef.current = 0;
+          setLines((prev) => [
+            ...prev,
+            {
+              id: `trunc-${Date.now()}`,
+              level: "warn",
+              message: "--- Fichier journal tronqué (rotation détectée) ---",
+              raw: "--- Fichier journal tronqué (rotation détectée) ---",
+            },
+          ]);
+        }
+
+        // Premier appel : on affiche l'historique complet du buffer
+        if (tauriLastSizeRef.current === 0) {
+          const rawLines = tail.content.split("\n");
+          if (rawLines.length > 0 && rawLines[rawLines.length - 1] === "") rawLines.pop();
+          const parsed = rawLines.map((l: string) => parseLogLine(l));
+          setLines((prev) => [...prev, ...parsed].slice(-2000));
+          tauriLastSizeRef.current = tail.total_size;
+          setIsConnected(true);
+          setErrorMsg(null);
+          return;
+        }
+
+        // Appels suivants : on ne lit que la fin (50 Ko couvre le deltas)
+        if (tail.total_size > tauriLastSizeRef.current) {
+          const rawLines = tail.content.split("\n");
+          if (rawLines.length > 0 && rawLines[rawLines.length - 1] === "") rawLines.pop();
+          const parsed = rawLines.map((l: string) => parseLogLine(l));
+          setLines((prev) => [...prev, ...parsed].slice(-2000));
+        }
+        tauriLastSizeRef.current = tail.total_size;
+      } catch (e) {
+        if (!cancelled) {
+          setErrorMsg(`Fichier de log inaccessible : ${errMsg(e)}`);
+          setIsConnected(false);
+        }
+      }
+    };
+
+    poll();
+    const timer = setInterval(poll, 1000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [logPath]);
+
+  useEffect(() => {
+    // Mode web uniquement : le mode Tauri utilise le polling Rust (ci-dessus)
+    if (isTauri()) return;
     connectWebSocket();
     return () => {
       if (wsRef.current) {

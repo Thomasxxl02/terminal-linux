@@ -29,6 +29,7 @@ fn main() {
             get_source_code,
             fs_tree,
             fs_read,
+            tail_log_file,
             fs_write,
             fs_create_file,
             fs_create_directory,

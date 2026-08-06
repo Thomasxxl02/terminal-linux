@@ -153,3 +153,11 @@ export async function listProcessesWeb(): Promise<
 export async function killProcessWeb(pid: number): Promise<void> {
   await tauriInvoke("kill_process", { pid });
 }
+
+/** Lit la fin d'un fichier de log (tail réel) — Tauri uniquement. */
+export async function tailLogFileWeb(
+  path: string,
+  maxBytes?: number
+): Promise<{ total_size: number; content: string }> {
+  return tauriInvoke("tail_log_file", { path, maxBytes: maxBytes ?? null });
+}
