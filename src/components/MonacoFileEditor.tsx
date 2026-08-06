@@ -1,7 +1,6 @@
 import React, { useEffect, useState, useCallback, useMemo } from "react";
 import Editor from "@monaco-editor/react";
 import { motion, AnimatePresence } from "motion/react";
-import { apiFetch } from "../lib/api";
 import {
   FileText,
   Folder,
@@ -28,6 +27,7 @@ import {
   CheckCircle2
 } from "lucide-react";
 import { FileTreeItem } from "../types";
+import { fsTree, fsRead, fsWrite, fsCreateFile, fsCreateDirectory, fsDelete, fsRename } from "../lib/fsApi";
 
 interface MonacoFileEditorProps {
   onExecuteInTerminal: (command: string) => void;
@@ -170,20 +170,15 @@ export const MonacoFileEditor: React.FC<MonacoFileEditorProps> = ({
     setLoadingTree(true);
     setErrorMessage(null);
     try {
-      const url = dirPath ? `/api/fs/tree?path=${encodeURIComponent(dirPath)}` : "/api/fs/tree";
-
-      const res = await apiFetch(url);
-      const data = await res.json();
+      const data = await fsTree(dirPath);
       if (data.items) {
         setItems(data.items);
         setCurrentPath(data.currentPath);
         setParentPath(data.parentPath);
-      } else if (data.error) {
-        setErrorMessage(data.error);
       }
     } catch (e) {
       console.error("Failed to load file tree", e);
-      setErrorMessage("Impossible de charger l'explorateur");
+      setErrorMessage(e instanceof Error ? e.message : "Impossible de charger l'explorateur");
     } finally {
       setLoadingTree(false);
     }
@@ -200,10 +195,7 @@ export const MonacoFileEditor: React.FC<MonacoFileEditorProps> = ({
     setLoadingFile(true);
     setErrorMessage(null);
     try {
-      const url = `/api/fs/read?path=${encodeURIComponent(filePath)}`;
-
-      const res = await apiFetch(url);
-      const data = await res.json();
+      const data = await fsRead(filePath);
       if (data.content !== undefined) {
         const newTab: MonacoTab = {
           path: data.path,
@@ -215,13 +207,11 @@ export const MonacoFileEditor: React.FC<MonacoFileEditorProps> = ({
         };
         setTabs((prev) => [...prev, newTab]);
         setActiveTabPath(data.path);
-      } else if (data.error) {
-        setErrorMessage(data.error);
-        setTimeout(() => setErrorMessage(null), 5000);
       }
     } catch (e) {
       console.error("Failed to read file", e);
-      setErrorMessage("Erreur lors de la lecture du fichier");
+      setErrorMessage(e instanceof Error ? e.message : "Erreur lors de la lecture du fichier");
+      setTimeout(() => setErrorMessage(null), 5000);
     } finally {
       setLoadingFile(false);
     }
@@ -281,31 +271,19 @@ export const MonacoFileEditor: React.FC<MonacoFileEditorProps> = ({
     setSaving(true);
     setErrorMessage(null);
     try {
-      const url = "/api/fs/write";
-      const payload = { path: targetPath, content: tabToSave.content };
-
-      const res = await apiFetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      const data = await res.json();
-      if (data.success) {
-        setTabs((prev) =>
-          prev.map((t) =>
-            t.path === targetPath
-              ? { ...t, originalContent: t.content, isDirty: false }
-              : t
-          )
-        );
-        setSaveSuccess(true);
-        setTimeout(() => setSaveSuccess(false), 2000);
-      } else if (data.error) {
-        setErrorMessage(data.error);
-      }
+      await fsWrite(targetPath, tabToSave.content);
+      setTabs((prev) =>
+        prev.map((t) =>
+          t.path === targetPath
+            ? { ...t, originalContent: t.content, isDirty: false }
+            : t
+        )
+      );
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 2000);
     } catch (e) {
       console.error("Failed to save file", e);
-      setErrorMessage("Impossible de sauvegarder le fichier");
+      setErrorMessage(e instanceof Error ? e.message : "Impossible de sauvegarder le fichier");
     } finally {
       setSaving(false);
     }
@@ -320,16 +298,8 @@ export const MonacoFileEditor: React.FC<MonacoFileEditorProps> = ({
     let successCount = 0;
     try {
       for (const t of dirtyTabs) {
-        const url = "/api/fs/write";
-        const payload = { path: t.path, content: t.content };
-
-        const res = await apiFetch(url, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        });
-        const data = await res.json();
-        if (data.success) {
+        try {
+          await fsWrite(t.path, t.content);
           setTabs((prev) =>
             prev.map((tab) =>
               tab.path === t.path
@@ -338,6 +308,8 @@ export const MonacoFileEditor: React.FC<MonacoFileEditorProps> = ({
             )
           );
           successCount++;
+        } catch (e) {
+          console.error(`Failed to save ${t.path}`, e);
         }
       }
       if (successCount > 0) {
@@ -374,27 +346,21 @@ export const MonacoFileEditor: React.FC<MonacoFileEditorProps> = ({
     const targetPath = `${currentPath}${separator}${name}`;
 
     try {
-      const endpoint = isFile ? "/api/fs/create-file" : "/api/fs/create-directory";
-      const res = await apiFetch(endpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ path: targetPath }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        setNewItemName("");
-        setIsCreatingFile(false);
-        setIsCreatingFolder(false);
-        fetchTree(currentPath);
-        if (isFile) {
-          openFileByPath(targetPath);
-        }
-      } else if (data.error) {
-        alert(data.error);
+      if (isFile) {
+        await fsCreateFile(targetPath);
+      } else {
+        await fsCreateDirectory(targetPath);
+      }
+      setNewItemName("");
+      setIsCreatingFile(false);
+      setIsCreatingFolder(false);
+      fetchTree(currentPath);
+      if (isFile) {
+        openFileByPath(targetPath);
       }
     } catch (e) {
       console.error("Failed to create filesystem item", e);
-      alert("Erreur de création");
+      alert(e instanceof Error ? e.message : "Erreur de création");
     }
   };
 
@@ -410,36 +376,27 @@ export const MonacoFileEditor: React.FC<MonacoFileEditorProps> = ({
     const newPath = `${currentPath}${separator}${name}`;
 
     try {
-      const res = await apiFetch("/api/fs/rename", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ oldPath: item.path, newPath }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        setTabs((prev) =>
-          prev.map((t) =>
-            t.path === item.path
-              ? {
-                  ...t,
-                  path: newPath,
-                  name,
-                  extension: getMonacoLanguage(name.split(".").pop() || ""),
-                }
-              : t
-          )
-        );
-        if (activeTabPath === item.path) {
-          setActiveTabPath(newPath);
-        }
-        setRenamingPath(null);
-        fetchTree(currentPath);
-      } else if (data.error) {
-        alert(data.error);
+      await fsRename(item.path, newPath);
+      setTabs((prev) =>
+        prev.map((t) =>
+          t.path === item.path
+            ? {
+                ...t,
+                path: newPath,
+                name,
+                extension: getMonacoLanguage(name.split(".").pop() || ""),
+              }
+            : t
+        )
+      );
+      if (activeTabPath === item.path) {
+        setActiveTabPath(newPath);
       }
+      setRenamingPath(null);
+      fetchTree(currentPath);
     } catch (e) {
       console.error("Rename failed", e);
-      alert("Erreur lors du renommage");
+      alert(e instanceof Error ? e.message : "Erreur lors du renommage");
     }
   };
 
@@ -448,25 +405,16 @@ export const MonacoFileEditor: React.FC<MonacoFileEditorProps> = ({
     if (!deletingItem) return;
 
     try {
-      const res = await apiFetch("/api/fs/delete", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ path: deletingItem.path }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        setTabs((prev) => prev.filter((t) => t.path !== deletingItem.path));
-        if (activeTabPath === deletingItem.path) {
-          setActiveTabPath("");
-        }
-        setDeletingItem(null);
-        fetchTree(currentPath);
-      } else if (data.error) {
-        alert(data.error);
+      await fsDelete(deletingItem.path);
+      setTabs((prev) => prev.filter((t) => t.path !== deletingItem.path));
+      if (activeTabPath === deletingItem.path) {
+        setActiveTabPath("");
       }
+      setDeletingItem(null);
+      fetchTree(currentPath);
     } catch (e) {
       console.error("Delete failed", e);
-      alert("Erreur lors de la suppression");
+      alert(e instanceof Error ? e.message : "Erreur lors de la suppression");
     }
   };
 
@@ -497,16 +445,8 @@ export const MonacoFileEditor: React.FC<MonacoFileEditorProps> = ({
           const separator = currentPath.endsWith("/") ? "" : "/";
           const targetPath = `${currentPath}${separator}${file.name}`;
           
-          // Write to local node endpoint with base64
-          await apiFetch("/api/fs/write", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              path: targetPath,
-              content,
-              encoding: "base64"
-            })
-          });
+          // Write avec encodage base64 (compatible Tauri et web)
+          await fsWrite(targetPath, content, "base64");
         }
         fetchTree(currentPath);
       } catch (err) {

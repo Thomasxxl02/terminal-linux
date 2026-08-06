@@ -4,10 +4,12 @@
 )]
 
 mod commands;
+mod fs;
 mod pty;
 mod secrets;
 
 use commands::*;
+use fs::*;
 use secrets::*;
 
 fn main() {
@@ -24,7 +26,14 @@ fn main() {
             secure_set,
             secure_get,
             secure_delete,
-            get_source_code
+            get_source_code,
+            fs_tree,
+            fs_read,
+            fs_write,
+            fs_create_file,
+            fs_create_directory,
+            fs_delete,
+            fs_rename
         ])
         .run(tauri::generate_context!())
         .expect("Erreur lors du démarrage de l'application Tauri & Rust Terminal");
