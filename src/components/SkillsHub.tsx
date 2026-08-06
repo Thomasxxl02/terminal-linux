@@ -267,7 +267,7 @@ export const SkillsHub: React.FC<SkillsHubProps> = ({ onExecuteInTerminal }) => 
     setNewParams([]);
   };
 
-  const handleDeleteCustomSkill = (id: string, e: React.MouseEvent) => {
+  const handleDeleteCustomSkill = (id: string, e: React.MouseEvent | React.KeyboardEvent) => {
     e.stopPropagation();
     const saved = localStorage.getItem("terminal_custom_skills");
     if (saved) {
@@ -300,15 +300,18 @@ export const SkillsHub: React.FC<SkillsHubProps> = ({ onExecuteInTerminal }) => 
       }
       
       // Ensure properties exist
-      const checked: CustomSkill[] = parsed.map((item: any) => ({
-        id: item.id || "custom-" + Math.random().toString(36).substr(2, 9),
-        title: item.title || "Skill Importé",
-        description: item.description || "Aucune description.",
-        category: item.category || "Importé",
-        scriptTemplate: item.scriptTemplate || "",
-        parameters: Array.isArray(item.parameters) ? item.parameters : [],
-        isCustom: true
-      }));
+      const checked: CustomSkill[] = parsed.map((item: unknown) => {
+        const it = item as Record<string, unknown>;
+        return {
+          id: (it.id as string) || "custom-" + Math.random().toString(36).substr(2, 9),
+          title: (it.title as string) || "Skill Importé",
+          description: (it.description as string) || "Aucune description.",
+          category: (it.category as string) || "Importé",
+          scriptTemplate: (it.scriptTemplate as string) || "",
+          parameters: Array.isArray(it.parameters) ? (it.parameters as string[]) : [],
+          isCustom: true
+        };
+      });
 
       localStorage.setItem("terminal_custom_skills", JSON.stringify(checked));
       setSkills([...PREDEFINED_SKILLS, ...checked]);
@@ -525,7 +528,7 @@ export const SkillsHub: React.FC<SkillsHubProps> = ({ onExecuteInTerminal }) => 
                     <label className="text-[10px] text-slate-400">Type de champ</label>
                     <select
                       value={tempParamType}
-                      onChange={(e) => setTempParamType(e.target.value as any)}
+                      onChange={(e) => setTempParamType(e.target.value as "text" | "number" | "select" | "checkbox")}
                       className="w-full bg-slate-950 border border-slate-800 rounded px-2.5 py-1 text-xs focus:outline-none focus:border-indigo-500 text-slate-300"
                     >
                       <option value="text">Texte (Input)</option>
@@ -671,7 +674,7 @@ export const SkillsHub: React.FC<SkillsHubProps> = ({ onExecuteInTerminal }) => 
                         onKeyDown={(e) => {
                           if (e.key === "Enter" || e.key === " ") {
                             e.stopPropagation();
-                            handleDeleteCustomSkill(s.id, e as any);
+                            handleDeleteCustomSkill(s.id, e);
                           }
                         }}
                         className="absolute right-3 top-3 p-1 text-slate-500 hover:text-red-400 hover:bg-red-500/10 rounded opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"

@@ -3,8 +3,15 @@ import fs from "fs";
 import path from "path";
 import { WebSocketServer, WebSocket } from "ws";
 import { PtyService } from "./services";
-import { getSafeLogPath } from "./security";
+import { errMsg, getSafeLogPath } from "./security";
 import { isAuthEnabled, verifyToken } from "./auth";
+
+// Propriété interne de heartbeat ajoutée par ws (pattern officiel du README ws)
+declare module "ws" {
+  interface WebSocket {
+    isAlive?: boolean;
+  }
+}
 
 const ptyService = PtyService.getInstance();
 
@@ -16,18 +23,18 @@ export function setupWebSockets(server: http.Server) {
 
   const pingInterval = setInterval(() => {
     wssPty.clients.forEach((ws: WebSocket) => {
-      if ((ws as any).isAlive === false) {
+      if (ws.isAlive === false) {
         return ws.terminate();
       }
-      (ws as any).isAlive = false;
+      ws.isAlive = false;
       ws.ping();
     });
 
     wssLogs.clients.forEach((ws: WebSocket) => {
-      if ((ws as any).isAlive === false) {
+      if (ws.isAlive === false) {
         return ws.terminate();
       }
-      (ws as any).isAlive = false;
+      ws.isAlive = false;
       ws.ping();
     });
   }, HEARTBEAT_INTERVAL);
@@ -61,9 +68,9 @@ export function setupWebSockets(server: http.Server) {
 
   // PTY Streams Connection Setup
   wssPty.on("connection", (ws: WebSocket, request: http.IncomingMessage) => {
-    (ws as any).isAlive = true;
+    ws.isAlive = true;
     ws.on("pong", () => {
-      (ws as any).isAlive = true;
+      ws.isAlive = true;
     });
 
     const url = new URL(request.url || "", `http://${request.headers.host}`);
@@ -133,9 +140,9 @@ export function setupWebSockets(server: http.Server) {
 
   // Log Streams Connection Setup
   wssLogs.on("connection", (ws: WebSocket, request: http.IncomingMessage) => {
-    (ws as any).isAlive = true;
+    ws.isAlive = true;
     ws.on("pong", () => {
-      (ws as any).isAlive = true;
+      ws.isAlive = true;
     });
 
     const url = new URL(request.url || "", `http://${request.headers.host}`);
@@ -219,8 +226,8 @@ class LogTailer {
       }, 100);
 
       this.ws.send(JSON.stringify({ type: "status", status: "tailing", path: this.filePath }));
-    } catch (err: any) {
-      this.ws.send(JSON.stringify({ type: "error", message: err.message }));
+    } catch (err) {
+      this.ws.send(JSON.stringify({ type: "error", message: errMsg(err) }));
     }
   }
 

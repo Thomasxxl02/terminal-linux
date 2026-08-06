@@ -26,6 +26,7 @@ import {
 } from "lucide-react";
 import { SshHost, TerminalSessionInfo } from "../types";
 import { useSecureStorage } from "../hooks/useSecureStorage";
+import { errMsg } from "../lib/errors";
 import { SshHostFormModal } from "./SshHostFormModal";
 import { Tooltip } from "./Tooltip";
 import { ConfirmationModal } from "./ConfirmationModal";
@@ -160,23 +161,24 @@ export const SshHostManager: React.FC<SshHostManagerProps> = ({
       const parsed = JSON.parse(bulkInput);
       if (Array.isArray(parsed)) {
         // Validate minimally
-        const validated: SshHost[] = parsed.map((item: any, idx) => {
-          if (!item.name || !item.host || !item.username) {
+        const validated: SshHost[] = parsed.map((item: unknown, idx) => {
+          const it = item as Record<string, unknown>;
+          if (!it.name || !it.host || !it.username) {
             throw new Error(`Élément #${idx + 1} invalide (requis: name, host, username)`);
           }
           return {
-            id: item.id || `ssh_imported_${Date.now()}_${idx}`,
-            name: item.name,
-            host: item.host,
-            port: Number(item.port) || 22,
-            username: item.username,
-            authType: item.authType === "password" ? "password" : "key",
-            privateKeyPath: item.privateKeyPath,
-            category: item.category || "Importé",
-            color: item.color || "#3b82f6",
-            description: item.description || "",
-            tunnels: Array.isArray(item.tunnels) ? item.tunnels : [],
-            quickCommands: Array.isArray(item.quickCommands) ? item.quickCommands : []
+            id: (it.id as string) || `ssh_imported_${Date.now()}_${idx}`,
+            name: it.name as string,
+            host: it.host as string,
+            port: Number(it.port) || 22,
+            username: it.username as string,
+            authType: it.authType === "password" ? "password" : "key",
+            privateKeyPath: it.privateKeyPath as string | undefined,
+            category: (it.category as string) || "Importé",
+            color: (it.color as string) || "#3b82f6",
+            description: (it.description as string) || "",
+            tunnels: Array.isArray(it.tunnels) ? (it.tunnels as string[]) : [],
+            quickCommands: Array.isArray(it.quickCommands) ? (it.quickCommands as SshHost["quickCommands"]) : []
           };
         });
 
@@ -187,8 +189,8 @@ export const SshHostManager: React.FC<SshHostManagerProps> = ({
       } else {
         setBulkError("Le contenu importé doit être un tableau JSON valide.");
       }
-    } catch (err: any) {
-      setBulkError(err.message || "Erreur de syntaxe JSON.");
+    } catch (err) {
+      setBulkError(errMsg(err) || "Erreur de syntaxe JSON.");
     }
   };
 

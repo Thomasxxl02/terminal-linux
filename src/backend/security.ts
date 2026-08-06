@@ -1,6 +1,20 @@
 import path from "path";
 
 /**
+ * Extrait un message d'erreur lisible depuis une valeur inconnue
+ * (remplace les `catch (err: any)` → `catch (err)` + errMsg(err)).
+ */
+export function errMsg(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  if (typeof err === "string") return err;
+  try {
+    return JSON.stringify(err);
+  } catch {
+    return "Erreur inconnue";
+  }
+}
+
+/**
  * Resolves a path against the workspace directory (process.cwd()) and checks for path traversal.
  * Also handles type validation to ensure parameter isn't an array/object.
  */

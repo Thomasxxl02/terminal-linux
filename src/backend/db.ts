@@ -8,30 +8,24 @@ const connectionString = process.env.DATABASE_URL;
 let pool: pg.Pool | null = null;
 
 // Simulated in-memory database for testing and fallback to guarantee no crashes
+// (Ne contient AUCUNE donnée fictive — les tables sont vides tant que
+//  PostgreSQL n'est pas connecté. Les hôtes/snippets fictifs ont été retirés.)
 const memDb: {
-  ssh_hosts: any[];
-  snippets: any[];
-  playbooks: any[];
-  sync_logs: any[];
+  ssh_hosts: Record<string, unknown>[];
+  snippets: Record<string, unknown>[];
+  playbooks: Record<string, unknown>[];
+  sync_logs: Record<string, unknown>[];
 } = {
-  ssh_hosts: [
-    { id: "host-1", name: "Serveur Prod Nginx", host: "192.168.1.10", port: 22, username: "admin", description: "Serveur de production Web principal" },
-    { id: "host-2", name: "Serveur Staging API", host: "192.168.1.20", port: 22, username: "developer", description: "Banc d'essai API et bases de données" }
-  ],
-  snippets: [
-    { id: "snip-1", title: "Clean Docker cache", command: "docker system prune -a --volumes -f", category: "Docker", description: "Nettoie le stockage Docker inutilisé" },
-    { id: "snip-2", title: "Show Active Ports", command: "netstat -tulnp", category: "Réseau", description: "Affiche les ports en cours d'écoute" }
-  ],
-  playbooks: [
-    { id: "playbook-1", name: "Déploiement Web Nginx", steps: ["apt-get update", "apt-get install nginx -y", "systemctl enable nginx", "systemctl start nginx"] }
-  ],
+  ssh_hosts: [],
+  snippets: [],
+  playbooks: [],
   sync_logs: []
 };
 
 export function getDbPool(): pg.Pool {
   if (process.env.NODE_ENV === "test") {
     // In test environment, return a dummy Pool to satisfy types if needed
-    return {} as any;
+    return new pg.Pool({ connectionString: "postgres://localhost:5432/test" });
   }
   if (!pool) {
     if (connectionString) {
@@ -45,7 +39,7 @@ export function getDbPool(): pg.Pool {
       console.warn("DATABASE_URL non fournie. Utilisation de la base de données simulée.");
     }
   }
-  return pool || ({} as any);
+  return pool ?? new pg.Pool({ connectionString: connectionString ?? "postgres://localhost:5432/app" });
 }
 
 // Database initial tables generation

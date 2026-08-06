@@ -173,7 +173,7 @@ function clearAuthCookie(res: Response): void {
 /** Middleware : exige un JWT valide. Si l'auth est désactivée, passe (rôle guest). */
 export function requireAuth(req: Request, res: Response, next: NextFunction) {
   if (!isAuthEnabled()) {
-    (req as any).user = { role: "guest", exp: 0, jti: "" };
+    req.user = { role: "guest", exp: 0, jti: "" };
     return next();
   }
   const token = extractCookieToken(req) || extractBearerToken(req);
@@ -181,14 +181,14 @@ export function requireAuth(req: Request, res: Response, next: NextFunction) {
   if (!user) {
     return res.status(401).json({ error: "Authentification requise" });
   }
-  (req as any).user = user;
+  req.user = user;
   return next();
 }
 
 /** Middleware : exige un rôle autorisé pour une action donnée. */
 export function requirePermission(action: string) {
   return (req: Request, res: Response, next: NextFunction) => {
-    const user = (req as any).user || { role: "guest" };
+    const user = req.user || { role: "guest" };
     if (!PermissionService.isAuthorized(user.role, action)) {
       return res.status(403).json({ error: "Privilèges insuffisants" });
     }

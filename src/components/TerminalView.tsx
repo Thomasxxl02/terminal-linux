@@ -30,8 +30,8 @@ import {
 } from "lucide-react";
 import { TerminalSessionInfo, TerminalTheme, FileTreeItem } from "../types";
 import { TERMINAL_THEMES } from "../constants/themes";
-import { encryptValue, decryptValue } from "../hooks/useLocalStorage";
 import { apiFetch, wsUrlWithToken } from "../lib/api";
+import { errMsg } from "../lib/errors";
 import { isTauri, tauriInvoke, tauriListen, PtyOutputEvent } from "../lib/tauri";
 interface TerminalViewProps {
   session: TerminalSessionInfo;
@@ -212,8 +212,12 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
     // 2. Check native external files dropped from desktop
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
       const droppedFiles = Array.from(e.dataTransfer.files);
+      // En Tauri, File expose `.path` (propriété non standard) ; sinon nom seul
       const pathsOrNames = droppedFiles
-        .map((f: File) => (f as any).path ? `"${(f as any).path}"` : `"${(f as File).name}"`)
+        .map((f: File) => {
+          const withPath = f as File & { path?: string };
+          return withPath.path ? `"${withPath.path}"` : `"${f.name}"`;
+        })
         .join(" ");
       sendInputToPty(`${pathsOrNames} `);
     }
@@ -348,8 +352,8 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
           setIsConnected(true);
           setStatusText("Connecté au PTY Rust (Tauri)");
           if (dims) sendResize(dims.cols, dims.rows);
-        } catch (e: any) {
-          setStatusText(`Erreur PTY Rust : ${e?.message || e}`);
+        } catch (e) {
+          setStatusText(`Erreur PTY Rust : ${errMsg(e)}`);
           setIsConnected(false);
         }
         return;

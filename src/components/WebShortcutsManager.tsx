@@ -713,7 +713,7 @@ export const WebShortcutsManager: React.FC<WebShortcutsManagerProps> = ({
                   </label>
                   <select
                     value={formOpenMode}
-                    onChange={(e) => setFormOpenMode(e.target.value as any)}
+                    onChange={(e) => setFormOpenMode(e.target.value as "new_tab" | "embedded" | "curl_terminal")}
                     className="w-full bg-slate-950 border border-slate-800 text-slate-100 px-3 py-2 text-xs rounded-lg focus:outline-none focus:border-emerald-500 font-mono"
                   >
                     <option value="new_tab">Nouvel onglet</option>

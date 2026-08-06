@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState, useMemo } from "react";
 import { wsUrlWithToken } from "../lib/api";
+import { errMsg } from "../lib/errors";
 import {
   Play,
   Pause,
@@ -154,8 +155,8 @@ export const LogsStreamer: React.FC = () => {
       ws.onclose = () => {
         setIsConnected(false);
       };
-    } catch (e: any) {
-      setErrorMsg(e.message || "Impossible de démarrer la connexion.");
+    } catch (e) {
+      setErrorMsg(errMsg(e) || "Impossible de démarrer la connexion.");
     }
   };
 

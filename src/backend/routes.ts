@@ -12,6 +12,7 @@ import {
   SynchronizationService,
 } from "./services";
 import {
+  errMsg,
   getSafePath,
   validateString,
   validateOptionalString,
@@ -88,8 +89,8 @@ router.post("/pty/create", writeLimiter, (req, res) => {
       shell: session.shell,
       cwd: session.cwd,
     });
-  } catch (err: any) {
-    res.status(400).json({ error: err.message });
+  } catch (err) {
+    res.status(400).json({ error: errMsg(err) });
   }
 });
 
@@ -106,15 +107,15 @@ router.post("/pty/:id/write", writeLimiter, (req, res) => {
     }
 
     // Permissions validation logic — rôle issu du JWT, jamais d'un header client
-    const role = (req as any).user?.role || "guest";
+    const role = req.user?.role || "guest";
     if (!PermissionService.isAuthorized(role, "execute_terminal")) {
       return res.status(403).json({ error: "Action non autorisée pour ce rôle" });
     }
 
     session.process.stdin.write(validatedData);
     res.json({ success: true });
-  } catch (err: any) {
-    res.status(400).json({ error: err.message });
+  } catch (err) {
+    res.status(400).json({ error: errMsg(err) });
   }
 });
 
@@ -128,34 +129,62 @@ router.delete("/pty/:id", writeLimiter, (req, res) => {
       return res.status(404).json({ error: "Session non trouvée" });
     }
     res.json({ success: true });
-  } catch (err: any) {
-    res.status(400).json({ error: err.message });
+  } catch (err) {
+    res.status(400).json({ error: errMsg(err) });
   }
 });
 
 // 3. System Stats, Monitoring and Maintenance APIs
-let cachedStats: { timestamp: number; data: any } | null = null;
+interface ProcessInfo {
+  pid: number;
+  user: string;
+  cpu: number;
+  mem: number;
+  name: string;
+}
+
+interface SystemStatsPayload {
+  platform: string;
+  release: string;
+  arch: string;
+  hostname: string;
+  cpus: number;
+  cpuModel: string;
+  cpuCores: { core: number; model: string; speed: number }[];
+  totalMem: number;
+  freeMem: number;
+  usedMem: number;
+  memUsagePercent: number;
+  uptime: number;
+  loadavg: number[];
+  disk: { total: number; free: number; used: number; percent: number };
+  processes: ProcessInfo[];
+  networkInterfaces: { name: string; address: string; family: string; mac: string; internal: boolean; netmask?: string }[];
+  nodeRuntime: Record<string, unknown>;
+  userInfo: { username: string; homedir: string; shell: string };
+  systemDetails: Record<string, string>;
+  activePtySessions: number;
+}
+
+let cachedStats: { timestamp: number; data: SystemStatsPayload } | null = null;
 const STATS_CACHE_TTL_MS = 1000;
 
-function getProcesses(): Promise<any[]> {
+function getProcesses(): Promise<ProcessInfo[]> {
   return new Promise((resolve) => {
     if (process.platform === "win32") {
-      resolve([
-        { pid: process.pid, name: "node.exe (server.ts)", cpu: 1.2, mem: 2.1, user: "user" },
-        { pid: 1024, name: "System Idle Process", cpu: 95.5, mem: 0.1, user: "SYSTEM" },
-        { pid: 4096, name: "explorer.exe", cpu: 0.5, mem: 1.5, user: "user" },
-      ]);
+      // Pas de faux processus : Windows n'est pas une cible de cette app.
+      resolve([]);
       return;
     }
 
     exec("ps -ao pid,user,%cpu,%mem,comm --sort=-%cpu 2>/dev/null || ps -o pid,user,%cpu,%mem,comm 2>/dev/null", (err, stdout) => {
       if (err || !stdout) {
-        resolve([{ pid: process.pid, name: "node server.ts", cpu: 0.8, mem: 1.8, user: "root" }]);
+        resolve([]);
         return;
       }
 
       const lines = stdout.trim().split("\n");
-      const list: any[] = [];
+      const list: ProcessInfo[] = [];
       for (let i = 1; i < lines.length; i++) {
         const line = lines[i].trim();
         if (!line) continue;
@@ -202,15 +231,14 @@ router.get("/system/stats", async (req, res) => {
         used,
         percent: total > 0 ? Math.round((used / total) * 100) : 0,
       };
-    } else {
-      disk = { total: 50 * 1024 * 1024 * 1024, free: 32 * 1024 * 1024 * 1024, used: 18 * 1024 * 1024 * 1024, percent: 36 };
     }
-  } catch (e) {
-    disk = { total: 50 * 1024 * 1024 * 1024, free: 32 * 1024 * 1024 * 1024, used: 18 * 1024 * 1024 * 1024, percent: 36 };
+    // Pas de fallback fictif : si statfsSync est indisponible, disk reste à 0.
+  } catch {
+    // Pas de fallback fictif : disk reste à 0.
   }
 
   // Network Interfaces
-  const networkInterfaces: any[] = [];
+  const networkInterfaces: SystemStatsPayload["networkInterfaces"] = [];
   try {
     const rawNets = os.networkInterfaces();
     for (const [ifaceName, ifaceList] of Object.entries(rawNets)) {
@@ -306,15 +334,15 @@ router.post("/system/kill-process", writeLimiter, (req, res) => {
     const validatedPid = validatePositiveInteger(pid, "pid");
 
     // Security Policy validation — rôle issu du JWT
-    const role = (req as any).user?.role || "guest";
+    const role = req.user?.role || "guest";
     if (!PermissionService.isAuthorized(role, "write_system")) {
       return res.status(403).json({ error: "Privilèges insuffisants pour arrêter un processus système" });
     }
 
     process.kill(validatedPid, "SIGTERM");
     res.json({ success: true, message: `Le processus ${validatedPid} a été arrêté avec succès` });
-  } catch (err: any) {
-    res.status(500).json({ error: `Impossible d'arrêter le processus : ${err.message}` });
+  } catch (err) {
+    res.status(500).json({ error: `Impossible d'arrêter le processus : ${errMsg(err)}` });
   }
 });
 
@@ -339,8 +367,8 @@ router.post("/system/maintenance", writeLimiter, (req, res) => {
     const command = MaintenanceService.getMaintenanceCommand(validatedTask);
     session.process.stdin.write(command);
     res.json({ success: true, message: "Commande envoyée au terminal", command });
-  } catch (err: any) {
-    res.status(400).json({ error: err.message });
+  } catch (err) {
+    res.status(400).json({ error: errMsg(err) });
   }
 });
 
@@ -385,8 +413,8 @@ router.get("/fs/tree", async (req, res) => {
       totalCount,
       truncated,
     });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
+  } catch (err) {
+    res.status(500).json({ error: errMsg(err) });
   }
 });
 
@@ -412,8 +440,8 @@ router.get("/fs/read", async (req, res) => {
       content,
       extension: path.extname(filePath).slice(1),
     });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
+  } catch (err) {
+    res.status(500).json({ error: errMsg(err) });
   }
 });
 
@@ -426,7 +454,7 @@ router.post("/fs/write", writeLimiter, async (req, res) => {
     const validatedEncoding = validateOptionalString(encoding, "encoding");
 
     // Role-based path security checks — rôle issu du JWT
-    const role = (req as any).user?.role || "guest";
+    const role = req.user?.role || "guest";
     if (!PermissionService.validatePathAccess(safeFile, role)) {
       return res.status(403).json({ error: "Accès restreint à ce dossier pour votre niveau de permissions" });
     }
@@ -438,8 +466,8 @@ router.post("/fs/write", writeLimiter, async (req, res) => {
       await fs.promises.writeFile(safeFile, validatedContent, "utf-8");
     }
     res.json({ success: true, message: "Fichier sauvegardé avec succès" });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
+  } catch (err) {
+    res.status(500).json({ error: errMsg(err) });
   }
 });
 
@@ -450,8 +478,8 @@ router.post("/fs/create-file", writeLimiter, async (req, res) => {
     if (fs.existsSync(safeFile)) return res.status(400).json({ error: "Le fichier existe déjà" });
     await fs.promises.writeFile(safeFile, "", "utf-8");
     res.json({ success: true, message: "Fichier créé avec succès" });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
+  } catch (err) {
+    res.status(500).json({ error: errMsg(err) });
   }
 });
 
@@ -462,8 +490,8 @@ router.post("/fs/create-directory", writeLimiter, async (req, res) => {
     if (fs.existsSync(safeDir)) return res.status(400).json({ error: "Le dossier existe déjà" });
     await fs.promises.mkdir(safeDir, { recursive: true });
     res.json({ success: true, message: "Dossier créé avec succès" });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
+  } catch (err) {
+    res.status(500).json({ error: errMsg(err) });
   }
 });
 
@@ -473,7 +501,7 @@ router.post("/fs/delete", writeLimiter, async (req, res) => {
     const safeItem = getSafePath(itemPath);
     if (!fs.existsSync(safeItem)) return res.status(404).json({ error: "Élément introuvable" });
 
-    const role = (req as any).user?.role || "guest";
+    const role = req.user?.role || "guest";
     if (!PermissionService.validatePathAccess(safeItem, role)) {
       return res.status(403).json({ error: "Privilèges insuffisants pour supprimer des fichiers système" });
     }
@@ -485,8 +513,8 @@ router.post("/fs/delete", writeLimiter, async (req, res) => {
       await fs.promises.unlink(safeItem);
     }
     res.json({ success: true, message: "Élément supprimé" });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
+  } catch (err) {
+    res.status(500).json({ error: errMsg(err) });
   }
 });
 
@@ -499,8 +527,8 @@ router.post("/fs/rename", writeLimiter, async (req, res) => {
     if (fs.existsSync(safeNew)) return res.status(400).json({ error: "La destination existe déjà" });
     await fs.promises.rename(safeOld, safeNew);
     res.json({ success: true, message: "Élément renommé" });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
+  } catch (err) {
+    res.status(500).json({ error: errMsg(err) });
   }
 });
 
@@ -510,8 +538,8 @@ router.get("/db/hosts", async (req, res) => {
   try {
     const hosts = await db.fetchAllSshHosts();
     res.json({ hosts });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
+  } catch (err) {
+    res.status(500).json({ error: errMsg(err) });
   }
 });
 
@@ -532,8 +560,8 @@ router.post("/db/hosts", writeLimiter, async (req, res) => {
     await SynchronizationService.syncEntity("ssh_host", id, "create", `Création de l'hôte ${validatedName}`);
     
     res.json({ success: true, host: newHost });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
+  } catch (err) {
+    res.status(500).json({ error: errMsg(err) });
   }
 });
 
@@ -545,8 +573,8 @@ router.delete("/db/hosts/:id", writeLimiter, async (req, res) => {
     await db.deleteSshHost(validatedId);
     await SynchronizationService.syncEntity("ssh_host", validatedId, "delete", "Suppression de l'hôte");
     res.json({ success: true });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
+  } catch (err) {
+    res.status(500).json({ error: errMsg(err) });
   }
 });
 
@@ -554,8 +582,8 @@ router.get("/db/snippets", async (req, res) => {
   try {
     const snippets = await db.fetchAllSnippets();
     res.json({ snippets });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
+  } catch (err) {
+    res.status(500).json({ error: errMsg(err) });
   }
 });
 
@@ -574,8 +602,8 @@ router.post("/db/snippets", writeLimiter, async (req, res) => {
     await SynchronizationService.syncEntity("snippet", id, "create", `Ajout du snippet ${validatedTitle}`);
 
     res.json({ success: true, snippet: newSnippet });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
+  } catch (err) {
+    res.status(500).json({ error: errMsg(err) });
   }
 });
 
@@ -587,8 +615,8 @@ router.delete("/db/snippets/:id", writeLimiter, async (req, res) => {
     await db.deleteSnippet(validatedId);
     await SynchronizationService.syncEntity("snippet", validatedId, "delete", "Suppression de snippet");
     res.json({ success: true });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
+  } catch (err) {
+    res.status(500).json({ error: errMsg(err) });
   }
 });
 
@@ -596,8 +624,8 @@ router.get("/db/playbooks", async (req, res) => {
   try {
     const playbooks = await db.fetchAllPlaybooks();
     res.json({ playbooks });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
+  } catch (err) {
+    res.status(500).json({ error: errMsg(err) });
   }
 });
 
@@ -618,8 +646,8 @@ router.post("/db/playbooks", writeLimiter, async (req, res) => {
     await SynchronizationService.syncEntity("playbook", id, "create", `Création du playbook ${validatedName}`);
 
     res.json({ success: true, playbook: newPlaybook });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
+  } catch (err) {
+    res.status(500).json({ error: errMsg(err) });
   }
 });
 
@@ -631,8 +659,8 @@ router.delete("/db/playbooks/:id", writeLimiter, async (req, res) => {
     await db.deletePlaybook(validatedId);
     await SynchronizationService.syncEntity("playbook", validatedId, "delete", "Suppression de playbook");
     res.json({ success: true });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
+  } catch (err) {
+    res.status(500).json({ error: errMsg(err) });
   }
 });
 
@@ -640,8 +668,8 @@ router.get("/db/sync-report", async (req, res) => {
   try {
     const report = await SynchronizationService.getSynchronizationReport();
     res.json(report);
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
+  } catch (err) {
+    res.status(500).json({ error: errMsg(err) });
   }
 });
 

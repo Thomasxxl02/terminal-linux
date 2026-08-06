@@ -32,7 +32,18 @@ interface RustFsItem {
   size: number;
 }
 
-function normalizeTree(r: any): FsTree {
+interface RawFsTree {
+  items?: RustFsItem[];
+  currentPath?: string;
+  current_path?: string;
+  parentPath?: string;
+  parent_path?: string;
+  totalCount?: number;
+  total_count?: number;
+  truncated?: boolean;
+}
+
+function normalizeTree(r: RawFsTree): FsTree {
   const items: FsItem[] = (r.items || []).map((i: RustFsItem) => ({
     name: i.name,
     path: i.path,

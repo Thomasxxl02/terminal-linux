@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { errMsg } from "../lib/errors";
 
 interface AuthScreenProps {
   onLogin: (staticToken: string) => Promise<void>;
@@ -19,8 +20,8 @@ export function AuthScreen({ onLogin }: AuthScreenProps) {
     setLoading(true);
     try {
       await onLogin(token.trim());
-    } catch (err: any) {
-      setError(err.message || "Échec de l'authentification");
+    } catch (err) {
+      setError(errMsg(err) || "Échec de l'authentification");
     } finally {
       setLoading(false);
     }

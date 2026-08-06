@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { apiFetch } from "../lib/api";
+import { errMsg } from "../lib/errors";
 import {
   Activity,
   Cpu,
@@ -205,8 +206,8 @@ export const SystemMonitorModal: React.FC<SystemMonitorModalProps> = ({
         setKillMessage({ text: `✗ Erreur : ${data.error || "Impossible d'arrêter le processus."}`, isError: true });
         setSelectedPidToKill(null);
       }
-    } catch (err: any) {
-      setKillMessage({ text: `✗ Exception : ${err.message}`, isError: true });
+    } catch (err) {
+      setKillMessage({ text: `✗ Exception : ${errMsg(err)}`, isError: true });
       setSelectedPidToKill(null);
     }
   };
@@ -251,12 +252,12 @@ export const SystemMonitorModal: React.FC<SystemMonitorModalProps> = ({
       );
     })
     .sort((a, b) => {
-      let valA: any = a[sortField];
-      let valB: any = b[sortField];
+      let valA: string | number = a[sortField] as string | number;
+      let valB: string | number = b[sortField] as string | number;
 
       if (typeof valA === "string") {
         valA = valA.toLowerCase();
-        valB = valB.toLowerCase();
+        valB = String(valB).toLowerCase();
       }
 
       if (valA < valB) return sortAsc ? -1 : 1;
