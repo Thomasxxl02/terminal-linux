@@ -518,7 +518,7 @@ const mockRemoteFs: Record<string, { content: string; isDirectory: boolean; size
 };
 
 router.get("/fs/remote/tree", (req, res) => {
-  const targetDir = (req.query.path as string) || "/home/developer";
+  const targetDir = validateOptionalString(req.query.path, "path") || "/home/developer";
   const normDir = targetDir.endsWith("/") ? targetDir : targetDir + "/";
   const uniqueItems = new Map<string, any>();
 
@@ -554,7 +554,7 @@ router.get("/fs/remote/tree", (req, res) => {
 });
 
 router.get("/fs/remote/read", (req, res) => {
-  const filePath = req.query.path as string;
+  const filePath = validateOptionalString(req.query.path, "path");
   if (!filePath) return res.status(400).json({ error: "Chemin requis" });
   const item = mockRemoteFs[filePath];
   if (!item || item.isDirectory) {
@@ -570,13 +570,14 @@ router.get("/fs/remote/read", (req, res) => {
 });
 
 router.post("/fs/remote/write", (req, res) => {
-  const { path: filePath, content } = req.body;
+  const filePath = validateOptionalString(req.body?.path, "path");
   if (!filePath) return res.status(400).json({ error: "Chemin requis" });
+  const content = validateOptionalString(req.body?.content, "content") || "";
 
   mockRemoteFs[filePath] = {
-    content: content || "",
+    content,
     isDirectory: false,
-    size: (content || "").length,
+    size: content.length,
   };
   res.json({ success: true, message: "Fichier distant enregistré avec succès", isMock: true });
 });
