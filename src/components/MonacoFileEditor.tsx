@@ -3,8 +3,6 @@ import Editor from "@monaco-editor/react";
 import { motion, AnimatePresence } from "motion/react";
 import {
   FileText,
-  Folder,
-  FolderOpen,
   Save,
   RefreshCw,
   FileCode,
@@ -13,21 +11,16 @@ import {
   Check,
   AlertCircle,
   Plus,
-  FolderPlus,
-  FilePlus,
-  Trash2,
-  Edit3,
   X,
   Settings,
-  Search,
   ChevronDown,
   PanelLeft,
-  Laptop,
-  UploadCloud,
   CheckCircle2
 } from "lucide-react";
 import { FileTreeItem } from "../types";
 import { fsTree, fsRead, fsWrite, fsCreateFile, fsCreateDirectory, fsDelete, fsRename } from "../lib/fsApi";
+import { MonacoSettingsPanel, EditorSettings } from "./MonacoSettingsPanel";
+import { MonacoExplorer } from "./MonacoExplorer";
 
 interface MonacoFileEditorProps {
   onExecuteInTerminal: (command: string) => void;
@@ -42,27 +35,8 @@ interface MonacoTab {
   extension: string;
   isDirty: boolean;
 }
-
-interface EditorSettings {
-  fontSize: number;
-  wordWrap: "on" | "off";
-  minimap: boolean;
-  theme: string;
-  tabSize: number;
-  autoSave: boolean;
-}
-
-const getDisplayPath = (fullPath: string): string => {
-  if (!fullPath) return "";
-  try {
-    if (typeof process !== "undefined" && typeof process.cwd === "function") {
-      return fullPath.replace(process.cwd(), ".");
-    }
-  } catch (e) {
-    // Ignore error in browser environments
-  }
-  return fullPath.replace(/^\/app\/applet/, ".").replace(/^\/workspace/, ".");
-};
+// (EditorSettings extrait dans MonacoSettingsPanel.tsx ;
+//  getDisplayPath extrait dans MonacoExplorer.tsx)
 
 export const MonacoFileEditor: React.FC<MonacoFileEditorProps> = ({
   onExecuteInTerminal,
@@ -475,14 +449,6 @@ export const MonacoFileEditor: React.FC<MonacoFileEditorProps> = ({
     });
   };
 
-  // Filter tree items on search query
-  const filteredItems = useMemo(() => {
-    if (!searchQuery.trim()) return items;
-    return items.filter((item) =>
-      item.name.toLowerCase().includes(searchQuery.toLowerCase())
-    );
-  }, [items, searchQuery]);
-
   // Find active tab item
   const activeTab = useMemo(() => {
     return tabs.find((t) => t.path === activeTabPath);
@@ -513,313 +479,37 @@ export const MonacoFileEditor: React.FC<MonacoFileEditorProps> = ({
             transition={{ type: "spring", damping: 25, stiffness: 200 }}
             className="border-r border-slate-800/80 bg-slate-900/40 flex flex-col h-full shrink-0 relative overflow-hidden"
           >
-            {/* Explorer header — système de fichiers local uniquement */}
-            <div className="p-2 border-b border-slate-800 bg-slate-950/60 flex items-center gap-1.5 text-[10px]">
-              <Laptop className="w-3.5 h-3.5 text-emerald-400" />
-              <span className="font-mono font-bold text-slate-300">Système de fichiers local</span>
-            </div>
-
-            {/* Explorer Header Actions */}
-            <div className="p-3 border-b border-slate-800/80 flex items-center justify-between bg-slate-900/10">
-              <span className="text-[10px] font-semibold text-slate-400 flex items-center gap-1.5 uppercase font-mono tracking-wider">
-                <FolderOpen className="w-4 h-4 text-emerald-400" />
-                Navigateur
-              </span>
-              <div className="flex items-center gap-1">
-                <button
-                  onClick={() => {
-                    setIsCreatingFile(true);
-                    setIsCreatingFolder(false);
-                    setNewItemName("");
-                  }}
-                  className="p-1 text-slate-400 hover:text-emerald-400 hover:bg-slate-800/60 rounded transition-colors"
-                  title="Nouveau fichier"
-                >
-                  <FilePlus className="w-3.5 h-3.5" />
-                </button>
-                <button
-                  onClick={() => {
-                    setIsCreatingFolder(true);
-                    setIsCreatingFile(false);
-                    setNewItemName("");
-                  }}
-                  className="p-1 text-slate-400 hover:text-emerald-400 hover:bg-slate-800/60 rounded transition-colors"
-                  title="Nouveau dossier"
-                >
-                  <FolderPlus className="w-3.5 h-3.5" />
-                </button>
-                <button
-                  onClick={() => fetchTree(currentPath)}
-                  className="p-1 text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 rounded transition-colors"
-                  title="Rafraîchir"
-                >
-                  <RefreshCw className={`w-3.5 h-3.5 ${loadingTree ? "animate-spin" : ""}`} />
-                </button>
-              </div>
-            </div>
-
-            {/* Current Path breadcrumb */}
-            <div className="px-3 py-1.5 bg-slate-950 font-mono text-[10px] text-slate-500 truncate border-b border-slate-800/40">
-              {getDisplayPath(currentPath)}
-            </div>
-
-            {/* In-place creation widgets */}
-            {isCreatingFile && (
-              <div className="p-2 border-b border-slate-800 bg-slate-950/60 space-y-1.5">
-                <span className="text-[9px] text-slate-400 uppercase font-mono flex items-center gap-1">
-                  <FilePlus className="w-3 h-3 text-emerald-400" /> Nouveau fichier
-                </span>
-                <div className="flex items-center gap-1">
-                  <input
-                    type="text"
-                    value={newItemName}
-                    onChange={(e) => setNewItemName(e.target.value)}
-                    placeholder="index.html"
-                    className="flex-1 bg-slate-900 border border-slate-700/80 text-slate-100 rounded px-2 py-1 text-xs font-mono focus:outline-none focus:border-emerald-500"
-                    autoFocus
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") handleCreateItem(true);
-                      if (e.key === "Escape") setIsCreatingFile(false);
-                    }}
-                  />
-                  <button
-                    onClick={() => handleCreateItem(true)}
-                    className="p-1 bg-emerald-500 text-slate-950 hover:bg-emerald-400 rounded transition-colors"
-                  >
-                    <Check className="w-3.5 h-3.5" />
-                  </button>
-                  <button
-                    onClick={() => setIsCreatingFile(false)}
-                    className="p-1 bg-slate-850 hover:bg-slate-800 rounded text-slate-400 hover:text-slate-200"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {isCreatingFolder && (
-              <div className="p-2 border-b border-slate-800 bg-slate-950/60 space-y-1.5">
-                <span className="text-[9px] text-slate-400 uppercase font-mono flex items-center gap-1">
-                  <FolderPlus className="w-3 h-3 text-emerald-400" /> Nouveau dossier
-                </span>
-                <div className="flex items-center gap-1">
-                  <input
-                    type="text"
-                    value={newItemName}
-                    onChange={(e) => setNewItemName(e.target.value)}
-                    placeholder="public"
-                    className="flex-1 bg-slate-900 border border-slate-700/80 text-slate-100 rounded px-2 py-1 text-xs font-mono focus:outline-none focus:border-emerald-500"
-                    autoFocus
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") handleCreateItem(false);
-                      if (e.key === "Escape") setIsCreatingFolder(false);
-                    }}
-                  />
-                  <button
-                    onClick={() => handleCreateItem(false)}
-                    className="p-1 bg-emerald-500 text-slate-950 hover:bg-emerald-400 rounded transition-colors"
-                  >
-                    <Check className="w-3.5 h-3.5" />
-                  </button>
-                  <button
-                    onClick={() => setIsCreatingFolder(false)}
-                    className="p-1 bg-slate-850 hover:bg-slate-800 rounded text-slate-400 hover:text-slate-200"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* Search filter bar */}
-            <div className="p-2 border-b border-slate-800/80 bg-slate-950/20">
-              <div className="relative">
-                <Search className="w-3.5 h-3.5 text-slate-500 absolute left-2.5 top-2" />
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Filtrer les fichiers..."
-                  className="w-full bg-slate-950 text-slate-200 border border-slate-800/80 rounded-md pl-8 pr-7 py-1 text-xs font-mono focus:outline-none focus:border-emerald-500/50 placeholder-slate-500"
-                />
-                {searchQuery && (
-                  <button
-                    onClick={() => setSearchQuery("")}
-                    className="p-1 absolute right-1.5 top-1 text-slate-500 hover:text-slate-300"
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
-                )}
-              </div>
-            </div>
-
-            {/* Directory Items List & Drag-and-Drop Drop Zone */}
-            <div
-              id="directory-items-list"
-              onDragOver={handleDragOverTree}
-              onDragLeave={handleDragLeaveTree}
-              onDrop={handleDropTree}
-              className={`flex-1 overflow-y-auto p-2 space-y-0.5 custom-scrollbar relative ${
-                isDraggingOverTree ? "bg-emerald-950/20 border-2 border-dashed border-emerald-500/50" : ""
-              }`}
-            >
-              {isDraggingOverTree && (
-                <div className="absolute inset-0 bg-[#091a14]/90 text-emerald-400 font-mono text-[10px] p-4 flex flex-col items-center justify-center text-center z-30 pointer-events-none">
-                  <UploadCloud className="w-8 h-8 mb-1 animate-bounce text-emerald-400" />
-                  <p className="font-bold">Déposer le fichier</p>
-                  <p className="text-slate-400 text-[9px] mt-0.5">Sera enregistré sous {getDisplayPath(currentPath)}</p>
-                </div>
-              )}
-
-              {parentPath && parentPath !== currentPath && (
-                <button
-                  onClick={() => fetchTree(parentPath)}
-                  className="w-full text-left px-2 py-1.5 rounded text-xs text-emerald-400 hover:bg-slate-800/40 font-mono flex items-center gap-2"
-                >
-                  <Folder className="w-3.5 h-3.5" /> .. (Dossier parent)
-                </button>
-              )}
-
-              {filteredItems.map((item) => {
-                const isItemRenaming = renamingPath === item.path;
-
-                return (
-                  <div
-                    key={item.path}
-                    className={`group w-full rounded text-xs flex items-center justify-between transition-all ${
-                      activeTabPath === item.path
-                        ? "bg-emerald-500/10 text-emerald-300 font-semibold border border-emerald-500/20"
-                        : "text-slate-300 hover:bg-slate-800/40"
-                    }`}
-                  >
-                    {isItemRenaming ? (
-                      <div className="flex-1 flex items-center gap-1.5 p-1">
-                        {item.isDirectory ? (
-                          <Folder className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                        ) : (
-                          <FileCode className="w-3.5 h-3.5 text-blue-400 shrink-0" />
-                        )}
-                        <input
-                          type="text"
-                          value={renameName}
-                          onChange={(e) => setRenameName(e.target.value)}
-                          className="flex-1 min-w-0 bg-slate-950 border border-slate-700 text-slate-100 rounded px-1 py-0.5 text-xs font-mono focus:outline-none focus:border-emerald-500"
-                          autoFocus
-                          onClick={(e) => e.stopPropagation()}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") {
-                              e.stopPropagation();
-                              handleConfirmRename(item);
-                            }
-                            if (e.key === "Escape") {
-                              e.stopPropagation();
-                              setRenamingPath(null);
-                            }
-                          }}
-                        />
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleConfirmRename(item);
-                          }}
-                          className="p-0.5 bg-emerald-500 text-slate-950 hover:bg-emerald-400 rounded transition-colors shrink-0"
-                        >
-                          <Check className="w-3 h-3" />
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setRenamingPath(null);
-                          }}
-                          className="p-0.5 bg-slate-800 hover:bg-slate-700 rounded text-slate-400 hover:text-slate-200 transition-colors shrink-0"
-                        >
-                          <X className="w-3 h-3" />
-                        </button>
-                      </div>
-                    ) : (
-                      <div
-                        onClick={() => handleItemClick(item)}
-                        className="flex-1 flex items-center justify-between px-2 py-1.5 cursor-pointer truncate"
-                      >
-                        <div className="flex items-center gap-2 truncate">
-                          {item.isDirectory ? (
-                            <Folder className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                          ) : (
-                            <FileCode className="w-3.5 h-3.5 text-blue-400 shrink-0" />
-                          )}
-                          <span className="truncate">{item.name}</span>
-                        </div>
-
-                        {/* Actions panel on hover */}
-                        <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1 transition-opacity shrink-0 ml-1">
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setRenamingPath(item.path);
-                              setRenameName(item.name);
-                            }}
-                            className="p-0.5 text-slate-400 hover:text-emerald-400 hover:bg-slate-850 rounded"
-                            title="Renommer"
-                          >
-                            <Edit3 className="w-3 h-3" />
-                          </button>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setDeletingItem(item);
-                            }}
-                            className="p-0.5 text-slate-400 hover:text-red-400 hover:bg-slate-850 rounded"
-                            title="Supprimer"
-                          >
-                            <Trash2 className="w-3 h-3" />
-                          </button>
-                        </div>
-
-                        {!item.isDirectory && item.size > 0 && (
-                          <span className="text-[9px] font-mono text-slate-500 group-hover:hidden shrink-0 ml-1">
-                            {Math.round(item.size / 1024)}k
-                          </span>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-              
-              {filteredItems.length === 0 && !loadingTree && (
-                <div className="p-4 text-center text-[10px] text-slate-500 font-mono">
-                  Dossier vide. Déposez des fichiers ici pour les téléverser.
-                </div>
-              )}
-            </div>
-
-            {/* Delete confirmation widget overlay */}
-            {deletingItem && (
-              <div className="absolute inset-x-0 bottom-0 p-3 bg-red-950/95 border-t border-red-850 z-20 space-y-2 text-slate-200">
-                <div className="flex items-start gap-2">
-                  <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
-                  <div className="text-xs font-mono">
-                    <p className="font-bold text-red-400">Supprimer définitivement ?</p>
-                    <p className="text-[10px] text-slate-300 break-all">{deletingItem.name}</p>
-                  </div>
-                </div>
-                <div className="flex items-center justify-end gap-2 text-[10px] font-mono">
-                  <button
-                    onClick={() => setDeletingItem(null)}
-                    className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded transition-colors"
-                  >
-                    Annuler
-                  </button>
-                  <button
-                    onClick={handleConfirmDelete}
-                    className="px-2 py-1 bg-red-600 hover:bg-red-500 text-white rounded font-bold transition-colors"
-                  >
-                    Supprimer
-                  </button>
-                </div>
-              </div>
-            )}
+            <MonacoExplorer
+              currentPath={currentPath}
+              parentPath={parentPath}
+              items={items}
+              loadingTree={loadingTree}
+              searchQuery={searchQuery}
+              isDraggingOverTree={isDraggingOverTree}
+              isCreatingFile={isCreatingFile}
+              isCreatingFolder={isCreatingFolder}
+              newItemName={newItemName}
+              renamingPath={renamingPath}
+              renameName={renameName}
+              deletingItem={deletingItem}
+              activeTabPath={activeTabPath}
+              onSetCreatingFile={setIsCreatingFile}
+              onSetCreatingFolder={setIsCreatingFolder}
+              onSetNewItemName={setNewItemName}
+              onSetRenamingPath={setRenamingPath}
+              onSetRenameName={setRenameName}
+              onSetDeletingItem={setDeletingItem}
+              onSetSearchQuery={setSearchQuery}
+              onSetDraggingOverTree={setIsDraggingOverTree}
+              onFetchTree={fetchTree}
+              onItemClick={handleItemClick}
+              onCreateItem={handleCreateItem}
+              onConfirmRename={handleConfirmRename}
+              onConfirmDelete={handleConfirmDelete}
+              onDragOverTree={handleDragOverTree}
+              onDragLeaveTree={handleDragLeaveTree}
+              onDropTree={handleDropTree}
+            />
           </motion.div>
         )}
       </AnimatePresence>
@@ -937,56 +627,7 @@ export const MonacoFileEditor: React.FC<MonacoFileEditorProps> = ({
 
         {/* Monaco Editor Settings Drawer Panel */}
         {showSettings && (
-          <div className="bg-[#0b0f19] border-b border-slate-800 p-4 grid grid-cols-2 sm:grid-cols-4 gap-4 z-20 text-xs font-mono">
-            <div className="space-y-1">
-              <span className="text-slate-400 text-[10px] uppercase">Police</span>
-              <div className="flex items-center bg-slate-950 border border-slate-800 rounded px-2 py-1">
-                <input
-                  type="number"
-                  value={editorSettings.fontSize}
-                  onChange={(e) => updateSetting("fontSize", Math.max(10, Math.min(24, parseInt(e.target.value) || 12)))}
-                  className="bg-transparent text-slate-200 w-full focus:outline-none"
-                />
-                <span className="text-[10px] text-slate-500">px</span>
-              </div>
-            </div>
-
-            <div className="space-y-1">
-              <span className="text-slate-400 text-[10px] uppercase">Retour à la ligne</span>
-              <select
-                value={editorSettings.wordWrap}
-                onChange={(e) => updateSetting("wordWrap", e.target.value as "on" | "off")}
-                className="bg-slate-950 text-slate-300 border border-slate-800 rounded px-2 py-1 w-full"
-              >
-                <option value="on">Activé</option>
-                <option value="off">Désactivé</option>
-              </select>
-            </div>
-
-            <div className="space-y-1">
-              <span className="text-slate-400 text-[10px] uppercase">Minimap</span>
-              <select
-                value={editorSettings.minimap ? "true" : "false"}
-                onChange={(e) => updateSetting("minimap", e.target.value === "true")}
-                className="bg-slate-950 text-slate-300 border border-slate-800 rounded px-2 py-1 w-full"
-              >
-                <option value="true">Visible</option>
-                <option value="false">Masqué</option>
-              </select>
-            </div>
-
-            <div className="space-y-1">
-              <span className="text-slate-400 text-[10px] uppercase">Sauvegarde Auto</span>
-              <select
-                value={editorSettings.autoSave ? "true" : "false"}
-                onChange={(e) => updateSetting("autoSave", e.target.value === "true")}
-                className="bg-slate-950 text-slate-300 border border-slate-800 rounded px-2 py-1 w-full"
-              >
-                <option value="true">Actif (1.5s)</option>
-                <option value="false">Inactif</option>
-              </select>
-            </div>
-          </div>
+          <MonacoSettingsPanel settings={editorSettings} onUpdateSetting={updateSetting} />
         )}
 
         {/* Editor canvas */}
