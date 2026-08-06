@@ -10,7 +10,6 @@ describe('SnippetsLibrary Component', () => {
     render(
       <SnippetsLibrary
         onExecuteInTerminal={mockOnExecuteInTerminal}
-        activeSessionId="session-1"
       />
     );
 
@@ -22,7 +21,6 @@ describe('SnippetsLibrary Component', () => {
     render(
       <SnippetsLibrary
         onExecuteInTerminal={mockOnExecuteInTerminal}
-        activeSessionId="session-1"
       />
     );
 
@@ -37,7 +35,6 @@ describe('SnippetsLibrary Component', () => {
     render(
       <SnippetsLibrary
         onExecuteInTerminal={mockOnExecuteInTerminal}
-        activeSessionId="session-1"
       />
     );
 

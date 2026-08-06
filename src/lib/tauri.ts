@@ -86,9 +86,11 @@ interface RustSystemStats {
 }
 
 /** Liste des sessions PTY (format web) — Tauri uniquement. */
-export async function listPtySessionsWeb(): Promise<Array<{ id: string; name: string; shell: string; cwd: string }>> {
+export async function listPtySessionsWeb(): Promise<Array<{ id: string; name: string; shell: string; cwd: string; createdAt: number }>> {
   const sessions = await tauriInvoke<RustPtySessionInfo[]>("list_pty_sessions");
-  return sessions.map((s) => ({ id: s.id, name: s.name, shell: s.shell, cwd: s.cwd }));
+  // L'ordre de la liste Rust reflète l'ordre de création ; createdAt sert
+  // uniquement d'horodatage d'affichage côté frontend.
+  return sessions.map((s) => ({ id: s.id, name: s.name, shell: s.shell, cwd: s.cwd, createdAt: Date.now() }));
 }
 
 /** Crée une session PTY — Tauri uniquement. */
@@ -96,7 +98,7 @@ export async function createPtySessionWeb(
   name: string,
   cols = 80,
   rows = 24
-): Promise<{ id: string; name: string; shell: string; cwd: string }> {
+): Promise<{ id: string; name: string; shell: string; cwd: string; createdAt: number }> {
   // crypto.getRandomValues : aléa cryptographique (Math.random est insuffisant
   // pour un identifiant — CodeQL js/unsafe-random)
   const rand = new Uint32Array(1);
@@ -108,7 +110,7 @@ export async function createPtySessionWeb(
     rows,
     name,
   });
-  return { id: sessionId, name, shell: "", cwd: "" };
+  return { id: sessionId, name, shell: "", cwd: "", createdAt: Date.now() };
 }
 
 /** Ferme une session PTY — Tauri uniquement. */

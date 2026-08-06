@@ -8,7 +8,7 @@ describe('PlaybookSequencer Component', () => {
   const mockOnOpenTerminalView = vi.fn();
 
   const mockSessions = [
-    { id: 'session-1', name: 'Bash Main', shell: 'bash', cwd: '/home/user', isActive: true, history: [] },
+    { id: 'session-1', name: 'Bash Main', shell: 'bash', cwd: '/home/user', createdAt: Date.now() },
   ];
 
   beforeEach(() => {

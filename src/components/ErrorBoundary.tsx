@@ -1,12 +1,19 @@
 import React from "react";
 
+interface ErrorBoundaryProps {
+  children: React.ReactNode;
+}
+
 interface ErrorBoundaryState {
   error: Error | null;
 }
 
 /** Affiche l'erreur à l'écran au lieu d'une page blanche silencieuse. */
-export class ErrorBoundary extends React.Component<{ children: React.ReactNode }, ErrorBoundaryState> {
-  state: ErrorBoundaryState = { error: null };
+export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  constructor(props: ErrorBoundaryProps) {
+    super(props);
+    this.state = { error: null };
+  }
 
   static getDerivedStateFromError(error: Error): ErrorBoundaryState {
     return { error };
@@ -29,25 +36,27 @@ export class ErrorBoundary extends React.Component<{ children: React.ReactNode }
             background: "#020617",
             color: "#f1f5f9",
             fontFamily: "monospace",
-            padding: "24px",
-            textAlign: "left",
+            padding: "2rem",
           }}
         >
-          <h2 style={{ color: "#f87171", marginBottom: 12 }}>Erreur de rendu</h2>
+          <h1 style={{ color: "#f87171", fontSize: "1.25rem", marginBottom: "1rem" }}>
+            ⚠️ Une erreur est survenue
+          </h1>
+          <p style={{ color: "#94a3b8", fontSize: "0.875rem", marginBottom: "0.5rem" }}>
+            {this.state.error.message}
+          </p>
           <pre
             style={{
               background: "#0f172a",
-              border: "1px solid #334155",
-              borderRadius: 8,
-              padding: 16,
-              maxWidth: "90%",
+              border: "1px solid #1e293b",
+              borderRadius: "0.5rem",
+              padding: "1rem",
+              fontSize: "0.75rem",
+              maxWidth: "100%",
               overflow: "auto",
               whiteSpace: "pre-wrap",
-              fontSize: 12,
             }}
           >
-            {this.state.error.message}
-            {"\n\n"}
             {this.state.error.stack}
           </pre>
         </div>

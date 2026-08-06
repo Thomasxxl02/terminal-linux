@@ -10,7 +10,7 @@ describe('Sidebar Component', () => {
   const mockOnCloseSession = vi.fn();
 
   const mockSessions = [
-    { id: 'session-1', name: 'Bash Main', shell: 'bash', cwd: '/home/user', isActive: true, history: [] },
+    { id: 'session-1', name: 'Bash Main', shell: 'bash', cwd: '/home/user', createdAt: Date.now() },
   ];
 
   it('renders sidebar brand and navigation tabs', () => {
@@ -28,9 +28,11 @@ describe('Sidebar Component', () => {
           release: '5.15.0',
           arch: 'x64',
           hostname: 'linux-pty',
-          cpusCount: 4,
-          totalMemBytes: 8589934592,
-          freeMemBytes: 4294967296,
+          cpus: 4,
+          cpuModel: 'Test CPU',
+          totalMem: 8589934592,
+          freeMem: 4294967296,
+          usedMem: 4294967296,
           memUsagePercent: 50,
           uptime: 3600,
           loadavg: [0.1, 0.2, 0.3],

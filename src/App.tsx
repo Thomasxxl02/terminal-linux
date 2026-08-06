@@ -153,6 +153,22 @@ export default function App() {
     checkAuth();
   }, []);
 
+  // Fetch System Statistics
+  const fetchSystemStats = useCallback(async () => {
+    try {
+      if (isTauri()) {
+        const data = await getSystemStatsWeb();
+        setSystemStats(data as unknown as SystemStats);
+        return;
+      }
+      const res = await apiFetch("/api/system/stats");
+      const data = await res.json();
+      setSystemStats(data);
+    } catch (e) {
+      console.error("Failed to fetch system stats", e);
+    }
+  }, []);
+
   // Login : échange le token statique contre un JWT, puis recharge l'app
   const handleLogin = useCallback(async (staticToken: string) => {
     const result = await login(staticToken);
@@ -176,22 +192,6 @@ export default function App() {
     setAuthRequired(true);
     setAuthChecked(true);
     setSessions([]);
-  }, []);
-
-  // Fetch System Statistics
-  const fetchSystemStats = useCallback(async () => {
-    try {
-      if (isTauri()) {
-        const data = await getSystemStatsWeb();
-        setSystemStats(data as SystemStats);
-        return;
-      }
-      const res = await apiFetch("/api/system/stats");
-      const data = await res.json();
-      setSystemStats(data);
-    } catch (e) {
-      console.error("Failed to fetch system stats", e);
-    }
   }, []);
 
   useEffect(() => {

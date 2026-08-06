@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from "motion/react";
 
 interface TooltipProps {
   content: React.ReactNode;
-  children: React.ReactElement;
+  children: React.ReactElement<Record<string, unknown>>;
   position?: "top" | "bottom" | "left" | "right";
   delay?: number;
 }
@@ -65,7 +65,7 @@ export function Tooltip({
       y: 0,
       x: 0,
       transition: {
-        type: "spring",
+        type: "spring" as const,
         stiffness: 400,
         damping: 25,
       },
@@ -73,29 +73,30 @@ export function Tooltip({
   };
 
   // Clone the child element to attach event handlers automatically
+  const childProps = children.props as Record<string, unknown>;
   const child = React.cloneElement(children, {
     onMouseEnter: (e: React.MouseEvent) => {
       handleMouseEnter();
-      if (children.props.onMouseEnter) {
-        children.props.onMouseEnter(e);
+      if (typeof childProps.onMouseEnter === "function") {
+        (childProps.onMouseEnter as (ev: React.MouseEvent) => void)(e);
       }
     },
     onMouseLeave: (e: React.MouseEvent) => {
       handleMouseLeave();
-      if (children.props.onMouseLeave) {
-        children.props.onMouseLeave(e);
+      if (typeof childProps.onMouseLeave === "function") {
+        (childProps.onMouseLeave as (ev: React.MouseEvent) => void)(e);
       }
     },
     onFocus: (e: React.FocusEvent) => {
       setIsVisible(true);
-      if (children.props.onFocus) {
-        children.props.onFocus(e);
+      if (typeof childProps.onFocus === "function") {
+        (childProps.onFocus as (ev: React.FocusEvent) => void)(e);
       }
     },
     onBlur: (e: React.FocusEvent) => {
       setIsVisible(false);
-      if (children.props.onBlur) {
-        children.props.onBlur(e);
+      if (typeof childProps.onBlur === "function") {
+        (childProps.onBlur as (ev: React.FocusEvent) => void)(e);
       }
     },
   });

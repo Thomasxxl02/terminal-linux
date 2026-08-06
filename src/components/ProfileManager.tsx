@@ -433,7 +433,9 @@ export const ProfileManager: React.FC<ProfileManagerProps> = ({
                       <h4 className="font-semibold text-slate-100 text-sm flex items-center gap-1.5">
                         {prof.name}
                         {prof.startupScript && (
-                          <FileCode2 className="w-3.5 h-3.5 text-amber-400" title="Script de démarrage inclus" />
+                          <span title="Script de démarrage inclus">
+                            <FileCode2 className="w-3.5 h-3.5 text-amber-400" />
+                          </span>
                         )}
                       </h4>
                     </div>

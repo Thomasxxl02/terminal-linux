@@ -308,7 +308,16 @@ export const SkillsHub: React.FC<SkillsHubProps> = ({ onExecuteInTerminal }) => 
           description: (it.description as string) || "Aucune description.",
           category: (it.category as string) || "Importé",
           scriptTemplate: (it.scriptTemplate as string) || "",
-          parameters: Array.isArray(it.parameters) ? (it.parameters as string[]) : [],
+          parameters: Array.isArray(it.parameters)
+            ? (it.parameters as Record<string, unknown>[]).map((p) => ({
+                name: (p.name as string) || "param",
+                label: (p.label as string) || (p.name as string) || "Paramètre",
+                type: (["text", "number", "select", "checkbox"].includes(p.type as string) ? p.type : "text") as SkillParameter["type"],
+                defaultValue: (p.defaultValue as string) || "",
+                options: Array.isArray(p.options) ? (p.options as string[]) : undefined,
+                placeholder: p.placeholder as string | undefined,
+              }))
+            : [],
           isCustom: true
         };
       });
