@@ -34,48 +34,6 @@ describe('Backend Express API Endpoints', () => {
     expect(Array.isArray(res.body.items)).toBe(true);
   });
 
-  it('GET /api/fs/remote/tree returns remote file explorer tree list', async () => {
-    const res = await request(app).get('/api/fs/remote/tree?path=/home/developer');
-    expect(res.status).toBe(200);
-    expect(res.body).toHaveProperty('currentPath');
-    expect(res.body.currentPath).toBe('/home/developer');
-    expect(res.body).toHaveProperty('items');
-    expect(Array.isArray(res.body.items)).toBe(true);
-    
-    // Check it contains some expected mock remote items
-    const hasDeployScript = res.body.items.some((item: any) => item.name === 'deploy.sh');
-    const hasReadme = res.body.items.some((item: any) => item.name === 'README.md');
-    expect(hasDeployScript || hasReadme).toBe(true);
-  });
-
-  it('GET /api/fs/remote/read returns mock remote file contents', async () => {
-    const res = await request(app).get('/api/fs/remote/read?path=/home/developer/README.md');
-    expect(res.status).toBe(200);
-    expect(res.body).toHaveProperty('path');
-    expect(res.body.path).toBe('/home/developer/README.md');
-    expect(res.body).toHaveProperty('content');
-    expect(res.body.content).toContain('Projet Distant SSH SFTP');
-  });
-
-  it('POST /api/fs/remote/write successfully records file content to mock remote registry', async () => {
-    const uniquePath = `/home/developer/test_remote_${Date.now()}.txt`;
-    const writeRes = await request(app)
-      .post('/api/fs/remote/write')
-      .send({ path: uniquePath, content: 'Remote Test Content!' });
-    
-    expect(writeRes.status).toBe(200);
-    expect(writeRes.body).toEqual({
-      success: true,
-      message: 'Fichier distant enregistré avec succès',
-      isMock: true
-    });
-
-    // Verify written file can be read back
-    const readRes = await request(app).get(`/api/fs/remote/read?path=${encodeURIComponent(uniquePath)}`);
-    expect(readRes.status).toBe(200);
-    expect(readRes.body.content).toBe('Remote Test Content!');
-  });
-
   it('POST /api/pty/create creates a new terminal PTY session', async () => {
     const res = await request(app)
       .post('/api/pty/create')

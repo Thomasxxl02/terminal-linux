@@ -23,12 +23,11 @@ import {
   Search,
   ChevronDown,
   PanelLeft,
-  Globe,
   Laptop,
   UploadCloud,
   CheckCircle2
 } from "lucide-react";
-import { FileTreeItem, SshHost } from "../types";
+import { FileTreeItem } from "../types";
 
 interface MonacoFileEditorProps {
   onExecuteInTerminal: (command: string) => void;
@@ -69,10 +68,8 @@ export const MonacoFileEditor: React.FC<MonacoFileEditorProps> = ({
   onExecuteInTerminal,
   initialFilePath,
 }) => {
-  // Navigation / Mode state
-  const [fsMode, setFsMode] = useState<"local" | "remote">("local");
-  const [sshHosts, setSshHosts] = useState<SshHost[]>([]);
-  const [selectedHostId, setSelectedHostId] = useState<string>("mock-ssh-host");
+  // Navigation / Mode state — mode local uniquement (le mode "SFTP distant"
+  // simulé a été supprimé : il présentait de fausses données comme réelles)
   const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(true);
 
   // Explorer State
@@ -122,32 +119,6 @@ export const MonacoFileEditor: React.FC<MonacoFileEditorProps> = ({
   const [saving, setSaving] = useState<boolean>(false);
   const [saveSuccess, setSaveSuccess] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-
-  // Fetch saved SSH Hosts on mount
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem("tauri_linux_terminal_ssh_hosts");
-      if (saved) {
-        setSshHosts(JSON.parse(saved));
-      }
-    } catch (e) {
-      console.error("Failed to read SSH hosts", e);
-    }
-  }, []);
-
-  const activeHost = useMemo(() => {
-    if (selectedHostId === "mock-ssh-host") {
-      return {
-        id: "mock-ssh-host",
-        name: "Serveur Nginx Distant (Simulé)",
-        host: "mock-ssh-host",
-        port: 22,
-        username: "developer",
-        authType: "password" as const
-      };
-    }
-    return sshHosts.find((h) => h.id === selectedHostId) || null;
-  }, [sshHosts, selectedHostId]);
 
   const updateSetting = <K extends keyof EditorSettings>(key: K, value: EditorSettings[K]) => {
     const updated = { ...editorSettings, [key]: value };
@@ -199,9 +170,7 @@ export const MonacoFileEditor: React.FC<MonacoFileEditorProps> = ({
     setLoadingTree(true);
     setErrorMessage(null);
     try {
-      const url = fsMode === "remote"
-        ? `/api/fs/remote/tree?path=${encodeURIComponent(dirPath || "/home/developer")}&host=${activeHost ? encodeURIComponent(JSON.stringify(activeHost)) : ""}`
-        : (dirPath ? `/api/fs/tree?path=${encodeURIComponent(dirPath)}` : "/api/fs/tree");
+      const url = dirPath ? `/api/fs/tree?path=${encodeURIComponent(dirPath)}` : "/api/fs/tree";
 
       const res = await apiFetch(url);
       const data = await res.json();
@@ -218,7 +187,7 @@ export const MonacoFileEditor: React.FC<MonacoFileEditorProps> = ({
     } finally {
       setLoadingTree(false);
     }
-  }, [fsMode, activeHost]);
+  }, []);
 
   // Open / Read file by path
   const openFileByPath = useCallback(async (filePath: string) => {
@@ -231,9 +200,7 @@ export const MonacoFileEditor: React.FC<MonacoFileEditorProps> = ({
     setLoadingFile(true);
     setErrorMessage(null);
     try {
-      const url = fsMode === "remote"
-        ? `/api/fs/remote/read?path=${encodeURIComponent(filePath)}&host=${activeHost ? encodeURIComponent(JSON.stringify(activeHost)) : ""}`
-        : `/api/fs/read?path=${encodeURIComponent(filePath)}`;
+      const url = `/api/fs/read?path=${encodeURIComponent(filePath)}`;
 
       const res = await apiFetch(url);
       const data = await res.json();
@@ -258,19 +225,19 @@ export const MonacoFileEditor: React.FC<MonacoFileEditorProps> = ({
     } finally {
       setLoadingFile(false);
     }
-  }, [tabs, fsMode, activeHost]);
+  }, [tabs]);
 
-  // Fetch initially or on folder/mode change
+  // Fetch initially or on folder change
   useEffect(() => {
-    if (initialFilePath && fsMode === "local") {
+    if (initialFilePath) {
       openFileByPath(initialFilePath);
       const lastSlashIdx = initialFilePath.lastIndexOf("/");
       const parentDir = lastSlashIdx !== -1 ? initialFilePath.substring(0, lastSlashIdx) : ".";
       fetchTree(parentDir);
     } else {
-      fetchTree(fsMode === "remote" ? "/home/developer" : undefined);
+      fetchTree();
     }
-  }, [fsMode, selectedHostId, initialFilePath]);
+  }, [initialFilePath]);
 
   // Explorer file click handler
   const handleItemClick = (item: FileTreeItem) => {
@@ -306,7 +273,7 @@ export const MonacoFileEditor: React.FC<MonacoFileEditorProps> = ({
     }
   };
 
-  // Save specific tab to local or remote endpoint
+  // Save specific tab
   const handleSaveFile = async (targetPath: string) => {
     const tabToSave = tabs.find((t) => t.path === targetPath);
     if (!tabToSave) return;
@@ -314,10 +281,8 @@ export const MonacoFileEditor: React.FC<MonacoFileEditorProps> = ({
     setSaving(true);
     setErrorMessage(null);
     try {
-      const url = fsMode === "remote" ? "/api/fs/remote/write" : "/api/fs/write";
-      const payload = fsMode === "remote"
-        ? { path: targetPath, content: tabToSave.content, host: activeHost ? JSON.stringify(activeHost) : null }
-        : { path: targetPath, content: tabToSave.content };
+      const url = "/api/fs/write";
+      const payload = { path: targetPath, content: tabToSave.content };
 
       const res = await apiFetch(url, {
         method: "POST",
@@ -355,10 +320,8 @@ export const MonacoFileEditor: React.FC<MonacoFileEditorProps> = ({
     let successCount = 0;
     try {
       for (const t of dirtyTabs) {
-        const url = fsMode === "remote" ? "/api/fs/remote/write" : "/api/fs/write";
-        const payload = fsMode === "remote"
-          ? { path: t.path, content: t.content, host: activeHost ? JSON.stringify(activeHost) : null }
-          : { path: t.path, content: t.content };
+        const url = "/api/fs/write";
+        const payload = { path: t.path, content: t.content };
 
         const res = await apiFetch(url, {
           method: "POST",
@@ -411,47 +374,23 @@ export const MonacoFileEditor: React.FC<MonacoFileEditorProps> = ({
     const targetPath = `${currentPath}${separator}${name}`;
 
     try {
-      if (fsMode === "remote") {
-        const res = await apiFetch("/api/fs/remote/write", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            path: targetPath,
-            content: "",
-            host: activeHost ? JSON.stringify(activeHost) : null
-          }),
-        });
-        const data = await res.json();
-        if (data.success) {
-          setNewItemName("");
-          setIsCreatingFile(false);
-          setIsCreatingFolder(false);
-          fetchTree(currentPath);
-          if (isFile) {
-            openFileByPath(targetPath);
-          }
-        } else if (data.error) {
-          alert(data.error);
+      const endpoint = isFile ? "/api/fs/create-file" : "/api/fs/create-directory";
+      const res = await apiFetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path: targetPath }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setNewItemName("");
+        setIsCreatingFile(false);
+        setIsCreatingFolder(false);
+        fetchTree(currentPath);
+        if (isFile) {
+          openFileByPath(targetPath);
         }
-      } else {
-        const endpoint = isFile ? "/api/fs/create-file" : "/api/fs/create-directory";
-        const res = await apiFetch(endpoint, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ path: targetPath }),
-        });
-        const data = await res.json();
-        if (data.success) {
-          setNewItemName("");
-          setIsCreatingFile(false);
-          setIsCreatingFolder(false);
-          fetchTree(currentPath);
-          if (isFile) {
-            openFileByPath(targetPath);
-          }
-        } else if (data.error) {
-          alert(data.error);
-        }
+      } else if (data.error) {
+        alert(data.error);
       }
     } catch (e) {
       console.error("Failed to create filesystem item", e);
@@ -471,21 +410,13 @@ export const MonacoFileEditor: React.FC<MonacoFileEditorProps> = ({
     const newPath = `${currentPath}${separator}${name}`;
 
     try {
-      if (fsMode === "remote") {
-        // Mock remote FS rename fallback
-        const readRes = await apiFetch(`/api/fs/remote/read?path=${encodeURIComponent(item.path)}&host=${activeHost ? encodeURIComponent(JSON.stringify(activeHost)) : ""}`);
-        const readData = await readRes.json();
-        
-        await apiFetch("/api/fs/remote/write", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            path: newPath,
-            content: readData.content || "",
-            host: activeHost ? JSON.stringify(activeHost) : null
-          })
-        });
-        
+      const res = await apiFetch("/api/fs/rename", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ oldPath: item.path, newPath }),
+      });
+      const data = await res.json();
+      if (data.success) {
         setTabs((prev) =>
           prev.map((t) =>
             t.path === item.path
@@ -503,34 +434,8 @@ export const MonacoFileEditor: React.FC<MonacoFileEditorProps> = ({
         }
         setRenamingPath(null);
         fetchTree(currentPath);
-      } else {
-        const res = await apiFetch("/api/fs/rename", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ oldPath: item.path, newPath }),
-        });
-        const data = await res.json();
-        if (data.success) {
-          setTabs((prev) =>
-            prev.map((t) =>
-              t.path === item.path
-                ? {
-                    ...t,
-                    path: newPath,
-                    name,
-                    extension: getMonacoLanguage(name.split(".").pop() || ""),
-                  }
-                : t
-            )
-          );
-          if (activeTabPath === item.path) {
-            setActiveTabPath(newPath);
-          }
-          setRenamingPath(null);
-          fetchTree(currentPath);
-        } else if (data.error) {
-          alert(data.error);
-        }
+      } else if (data.error) {
+        alert(data.error);
       }
     } catch (e) {
       console.error("Rename failed", e);
@@ -543,32 +448,21 @@ export const MonacoFileEditor: React.FC<MonacoFileEditorProps> = ({
     if (!deletingItem) return;
 
     try {
-      if (fsMode === "remote") {
-        // Just remove from tabs if remote delete is triggered (we handle simulated remote FS cleanly)
+      const res = await apiFetch("/api/fs/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path: deletingItem.path }),
+      });
+      const data = await res.json();
+      if (data.success) {
         setTabs((prev) => prev.filter((t) => t.path !== deletingItem.path));
         if (activeTabPath === deletingItem.path) {
           setActiveTabPath("");
         }
         setDeletingItem(null);
-        // Refresh
         fetchTree(currentPath);
-      } else {
-        const res = await apiFetch("/api/fs/delete", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ path: deletingItem.path }),
-        });
-        const data = await res.json();
-        if (data.success) {
-          setTabs((prev) => prev.filter((t) => t.path !== deletingItem.path));
-          if (activeTabPath === deletingItem.path) {
-            setActiveTabPath("");
-          }
-          setDeletingItem(null);
-          fetchTree(currentPath);
-        } else if (data.error) {
-          alert(data.error);
-        }
+      } else if (data.error) {
+        alert(data.error);
       }
     } catch (e) {
       console.error("Delete failed", e);
@@ -603,29 +497,16 @@ export const MonacoFileEditor: React.FC<MonacoFileEditorProps> = ({
           const separator = currentPath.endsWith("/") ? "" : "/";
           const targetPath = `${currentPath}${separator}${file.name}`;
           
-          if (fsMode === "remote") {
-            // Write to remote node endpoint
-            await apiFetch("/api/fs/remote/write", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                path: targetPath,
-                content: atob(content),
-                host: activeHost ? JSON.stringify(activeHost) : null
-              })
-            });
-          } else {
-            // Write to local node endpoint with base64
-            await apiFetch("/api/fs/write", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                path: targetPath,
-                content,
-                encoding: "base64"
-              })
-            });
-          }
+          // Write to local node endpoint with base64
+          await apiFetch("/api/fs/write", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              path: targetPath,
+              content,
+              encoding: "base64"
+            })
+          });
         }
         fetchTree(currentPath);
       } catch (err) {
@@ -692,52 +573,11 @@ export const MonacoFileEditor: React.FC<MonacoFileEditorProps> = ({
             transition={{ type: "spring", damping: 25, stiffness: 200 }}
             className="border-r border-slate-800/80 bg-slate-900/40 flex flex-col h-full shrink-0 relative overflow-hidden"
           >
-            {/* Connection mode Selector Header */}
-            <div className="p-2 border-b border-slate-800 bg-slate-950/60 flex items-center justify-between gap-1 text-[10px]">
-              <button
-                onClick={() => setFsMode("local")}
-                className={`flex-1 flex items-center justify-center gap-1.5 py-1 rounded font-mono font-bold transition-all ${
-                  fsMode === "local"
-                    ? "bg-slate-800 border border-slate-700 text-emerald-400"
-                    : "text-slate-400 hover:text-slate-200"
-                }`}
-              >
-                <Laptop className="w-3.5 h-3.5" />
-                Local
-              </button>
-              <button
-                onClick={() => setFsMode("remote")}
-                className={`flex-1 flex items-center justify-center gap-1.5 py-1 rounded font-mono font-bold transition-all ${
-                  fsMode === "remote"
-                    ? "bg-slate-800 border border-slate-700 text-emerald-400"
-                    : "text-slate-400 hover:text-slate-200"
-                }`}
-              >
-                <Globe className="w-3.5 h-3.5" />
-                SFTP
-              </button>
+            {/* Explorer header — système de fichiers local uniquement */}
+            <div className="p-2 border-b border-slate-800 bg-slate-950/60 flex items-center gap-1.5 text-[10px]">
+              <Laptop className="w-3.5 h-3.5 text-emerald-400" />
+              <span className="font-mono font-bold text-slate-300">Système de fichiers local</span>
             </div>
-
-            {/* Remote connection host picker */}
-            {fsMode === "remote" && (
-              <div className="p-2 bg-slate-950/80 border-b border-slate-800 flex items-center gap-1">
-                <Globe className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                <select
-                  value={selectedHostId}
-                  onChange={(e) => setSelectedHostId(e.target.value)}
-                  className="bg-transparent text-[11px] text-slate-300 font-mono focus:outline-none w-full cursor-pointer"
-                >
-                  <option value="mock-ssh-host" className="bg-slate-950 text-slate-200">
-                    Nginx Distant (Simulé)
-                  </option>
-                  {sshHosts.map((host) => (
-                    <option key={host.id} value={host.id} className="bg-slate-950 text-slate-200">
-                      {host.name} ({host.host})
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
 
             {/* Explorer Header Actions */}
             <div className="p-3 border-b border-slate-800/80 flex items-center justify-between bg-slate-900/10">
@@ -1259,24 +1099,15 @@ export const MonacoFileEditor: React.FC<MonacoFileEditorProps> = ({
                 >
                   Ouvrir l'Explorateur
                 </button>
-                {fsMode === "local" ? (
-                  <button
-                    onClick={() => {
-                      setIsCreatingFile(true);
-                      setIsSidebarOpen(true);
-                    }}
-                    className="px-3 py-1.5 bg-emerald-600/10 hover:bg-emerald-600/20 text-emerald-400 text-[11px] rounded border border-emerald-500/20 font-mono transition-colors"
-                  >
-                    Créer un nouveau fichier
-                  </button>
-                ) : (
-                  <button
-                    onClick={() => openFileByPath("/home/developer/README.md")}
-                    className="px-3 py-1.5 bg-emerald-600/10 hover:bg-emerald-600/20 text-emerald-400 text-[11px] rounded border border-emerald-500/20 font-mono transition-colors"
-                  >
-                    Charger le README distant (démo)
-                  </button>
-                )}
+                <button
+                  onClick={() => {
+                    setIsCreatingFile(true);
+                    setIsSidebarOpen(true);
+                  }}
+                  className="px-3 py-1.5 bg-emerald-600/10 hover:bg-emerald-600/20 text-emerald-400 text-[11px] rounded border border-emerald-500/20 font-mono transition-colors"
+                >
+                  Créer un nouveau fichier
+                </button>
               </div>
             </div>
           )}

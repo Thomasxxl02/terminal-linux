@@ -38,96 +38,9 @@ const STORAGE_KEY_SSH = "terminal_ssh_hosts";
 const STORAGE_KEY_TUNNELS = "terminal_ssh_tunnels";
 
 const DEFAULT_SSH_HOSTS: SshHost[] = [
-  {
-    id: "ssh-prod-1",
-    name: "Serveur Prod West (Ubuntu 22.04)",
-    host: "192.168.1.100",
-    port: 22,
-    username: "ubuntu",
-    authType: "key",
-    privateKeyPath: "~/.ssh/id_rsa_prod",
-    category: "Production",
-    color: "#10b981",
-    description: "Serveur d'application principal avec docker & Nginx",
-    tunnels: ["8080:localhost:80", "3306:localhost:3306"],
-  },
-  {
-    id: "ssh-vps-staging",
-    name: "VPS Staging (Debian 12)",
-    host: "vps.staging-cloud.net",
-    port: 2222,
-    username: "deploy",
-    authType: "key",
-    privateKeyPath: "~/.ssh/id_ed25519",
-    category: "Staging",
-    color: "#3b82f6",
-    description: "Environnement de recette & pré-production",
-    tunnels: [],
-  },
-  {
-    id: "ssh-db-tunnel",
-    name: "Passerelle Database (PostgreSQL)",
-    host: "db-gateway.internal",
-    port: 22,
-    username: "postgres_admin",
-    authType: "key",
-    privateKeyPath: "~/.ssh/db_key.pem",
-    category: "Databases",
-    color: "#8b5cf6",
-    description: "Tunnel sécurisé vers l'instance Postgres privée",
-    tunnels: ["5432:10.0.0.12:5432"],
-  },
 ];
 
 const DEFAULT_TUNNELS: SshTunnel[] = [
-  {
-    id: "tunnel-mysql",
-    name: "Redirection MySQL Staging",
-    hostId: "ssh-vps-staging",
-    type: "local",
-    localPort: 3306,
-    remoteHost: "127.0.0.1",
-    remotePort: 3306,
-    status: "inactive",
-    createdAt: Date.now() - 3600000 * 24,
-    trafficSent: 154200,
-    trafficReceived: 894500,
-    latency: 35,
-    serverAliveInterval: 60,
-    exitOnFailure: true
-  },
-  {
-    id: "tunnel-web",
-    name: "Reverse Proxy Dev Webserver",
-    hostId: "ssh-prod-1",
-    type: "remote",
-    localPort: 3000,
-    remoteHost: "localhost",
-    remotePort: 80,
-    status: "inactive",
-    createdAt: Date.now() - 3600000 * 48,
-    trafficSent: 54100,
-    trafficReceived: 213000,
-    latency: 18,
-    serverAliveInterval: 30,
-    exitOnFailure: true
-  },
-  {
-    id: "tunnel-socks",
-    name: "SOCKS5 Proxy Navigation Sécurisée",
-    hostId: "ssh-db-tunnel",
-    type: "dynamic",
-    localPort: 1080,
-    remoteHost: "127.0.0.1",
-    remotePort: 0,
-    status: "inactive",
-    createdAt: Date.now() - 3600000 * 12,
-    trafficSent: 1205000,
-    trafficReceived: 9845000,
-    latency: 45,
-    serverAliveInterval: 60,
-    exitOnFailure: false
-  }
 ];
 
 interface SshTunnelManagerProps {

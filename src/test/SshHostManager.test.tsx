@@ -12,7 +12,7 @@ describe('SshHostManager Component', () => {
     window.localStorage.clear();
   });
 
-  it('renders SSH host manager header and default hosts', () => {
+  it("renders SSH host manager header (liste vide au depart - plus d hotes fictifs)", () => {
     render(
       <SshHostManager
         onExecuteInTerminal={mockOnExecuteInTerminal}
@@ -23,11 +23,18 @@ describe('SshHostManager Component', () => {
     );
 
     expect(screen.getByText(/Carnet de Connexions SSH & Tunnels Distants/i)).toBeInTheDocument();
-    expect(screen.getByText(/Serveur Prod West/i)).toBeInTheDocument();
-    expect(screen.getByText(/VPS Staging/i)).toBeInTheDocument();
+    // Aucun hôte fictif pré-rempli (les données inventées ont été supprimées)
+    expect(screen.queryByText(/Serveur Prod West/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/VPS Staging/i)).not.toBeInTheDocument();
   });
 
-  it('filters SSH hosts by search query', () => {
+  it('filters SSH hosts by search query', async () => {
+    // Pré-remplit localStorage avec un hôte réel ajouté par l'utilisateur
+    window.localStorage.setItem('terminal_ssh_hosts', JSON.stringify([
+      { id: 'ssh-1', name: 'Raspberry Pi Cluster Local', host: 'raspberry.local', port: 22, username: 'pi', authType: 'key' },
+      { id: 'ssh-2', name: 'Serveur Prod West', host: '192.168.1.100', port: 22, username: 'ubuntu', authType: 'key' }
+    ]));
+
     render(
       <SshHostManager
         onExecuteInTerminal={mockOnExecuteInTerminal}
@@ -40,11 +47,15 @@ describe('SshHostManager Component', () => {
     const searchInput = screen.getByPlaceholderText(/Rechercher nom, IP, user/i);
     fireEvent.change(searchInput, { target: { value: 'Raspberry' } });
 
-    expect(screen.getByText(/Raspberry Pi Cluster Local/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Raspberry Pi Cluster Local/i)).toBeInTheDocument();
     expect(screen.queryByText(/Serveur Prod West/i)).not.toBeInTheDocument();
   });
 
-  it('triggers Connect SSH action when button is clicked', () => {
+  it('triggers Connect SSH action when button is clicked', async () => {
+    window.localStorage.setItem('terminal_ssh_hosts', JSON.stringify([
+      { id: 'ssh-prod-1', name: 'Serveur Prod West', host: '192.168.1.100', port: 22, username: 'ubuntu', authType: 'key' }
+    ]));
+
     render(
       <SshHostManager
         onExecuteInTerminal={mockOnExecuteInTerminal}
@@ -54,7 +65,7 @@ describe('SshHostManager Component', () => {
       />
     );
 
-    const connectButtons = screen.getAllByRole('button', { name: /Connecter SSH/i });
+    const connectButtons = await screen.findAllByRole('button', { name: /Connecter SSH/i });
     fireEvent.click(connectButtons[0]);
 
     expect(mockOnLaunchSshSession).toHaveBeenCalledTimes(1);
