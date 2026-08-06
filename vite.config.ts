@@ -14,9 +14,11 @@ export default defineConfig(() => {
     server: {
       // Mode Tauri : Vite sert le frontend sans backend Express.
       // Port fixe 3000 pour correspondre au devUrl de tauri.conf.json.
+      // host "localhost" écoute IPv4+IPv6 (évite la webview Tauri qui
+      // résout localhost en ::1 pendant que Vite n'écoute que 127.0.0.1)
       port: 3000,
       strictPort: true,
-      host: "127.0.0.1",
+      host: "localhost",
       // HMR is disabled in AI Studio via DISABLE_HMR env var.
       // Do not modify—file watching is disabled to prevent flickering during agent edits.
       hmr: process.env.DISABLE_HMR !== "true",
