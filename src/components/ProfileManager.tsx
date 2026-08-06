@@ -369,7 +369,7 @@ export const ProfileManager: React.FC<ProfileManagerProps> = ({
               Rapport d'Intégrité des Shells Système
             </h4>
             <div className="bg-slate-950 p-3 rounded-lg border border-slate-800 font-mono text-[11px] max-h-48 overflow-y-auto space-y-1.5 text-slate-300">
-              {shellValidationLogs.map((log, idx) => {
+              {shellValidationLogs.filter(Boolean).map((log, idx) => {
                 let colorClass = "text-slate-300";
                 if (log.includes("[SUCCESS]")) colorClass = "text-emerald-400 font-semibold";
                 if (log.includes("[WARN]")) colorClass = "text-amber-400";

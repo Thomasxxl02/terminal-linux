@@ -1,13 +1,15 @@
 import { vi } from 'vitest';
 import '@testing-library/jest-dom';
 
-// Mock ResizeObserver
+// Mock ResizeObserver (classe constructible — `new ResizeObserver(...)`)
 if (typeof global !== 'undefined') {
-  global.ResizeObserver = vi.fn().mockImplementation(() => ({
-    observe: vi.fn(),
-    unobserve: vi.fn(),
-    disconnect: vi.fn(),
-  }));
+  class MockResizeObserver {
+    observe = vi.fn();
+    unobserve = vi.fn();
+    disconnect = vi.fn();
+    constructor(_callback: ResizeObserverCallback) {}
+  }
+  global.ResizeObserver = MockResizeObserver as unknown as typeof ResizeObserver;
 }
 
 // Mock window.matchMedia
