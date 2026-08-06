@@ -2,6 +2,7 @@ import express from "express";
 import http from "http";
 import path from "path";
 import fs from "fs";
+import rateLimit from "express-rate-limit";
 import { createServer as createViteServer } from "vite";
 import dotenv from "dotenv";
 
@@ -97,8 +98,18 @@ async function startServer() {
     app.use(vite.middlewares);
   } else {
     const distPath = path.join(process.cwd(), "dist");
+    // Rate limiting sur le fallback SPA : chaque requête déclenche un accès
+    // disque (sendFile). Sans limite, un attaquant peut faire un DoS simple.
+    const spaLimiter = rateLimit({
+      windowMs: 15 * 60 * 1000, // 15 minutes
+      max: 600, // limit each IP to 600 SPA fallback requests per 15 minutes
+      standardHeaders: true,
+      legacyHeaders: false,
+      message: { error: "Trop de requêtes, veuillez réessayer plus tard." },
+      skip: () => process.env.NODE_ENV === "test",
+    });
     app.use(express.static(distPath));
-    app.get("*", (req, res) => {
+    app.get("*", spaLimiter, (req, res) => {
       res.sendFile(path.join(distPath, "index.html"));
     });
   }
