@@ -32,6 +32,7 @@ pub struct SystemStats {
     pub mem_usage_percent: f64,
     pub uptime: u64,
     pub os_release: String,
+    pub loadavg: Vec<f64>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -159,7 +160,24 @@ pub async fn get_system_stats() -> Result<SystemStats, String> {
         mem_usage_percent,
         uptime: uptime_secs(),
         os_release,
+        loadavg: loadavg(),
     })
+}
+
+/// Lit /proc/loadavg (3 valeurs : 1/5/15 min). Fallback [0.0, 0.0, 0.0].
+fn loadavg() -> Vec<f64> {
+    std::fs::read_to_string("/proc/loadavg")
+        .ok()
+        .and_then(|s| {
+            let parts: Vec<&str> = s.split_whitespace().collect();
+            let vals: Vec<f64> = parts
+                .iter()
+                .take(3)
+                .filter_map(|p| p.parse::<f64>().ok())
+                .collect();
+            if vals.len() == 3 { Some(vals) } else { None }
+        })
+        .unwrap_or_else(|| vec![0.0, 0.0, 0.0])
 }
 
 // ── Helpers système sans dépendance externe ───────────────────────

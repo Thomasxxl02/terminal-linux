@@ -129,8 +129,8 @@ export const SystemMonitorModal: React.FC<SystemMonitorModalProps> = ({
   useEffect(() => {
     if (stats) {
       const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-      const approxCpu = stats.cpus > 0 
-        ? Math.min(100, Math.round((stats.loadavg[0] / stats.cpus) * 100))
+      const approxCpu = stats.cpus > 0 && stats.loadavg?.length
+        ? Math.min(100, Math.round(((stats.loadavg[0] ?? 0) / stats.cpus) * 100))
         : stats.memUsagePercent;
 
       setHistory((prev) => {
@@ -219,7 +219,7 @@ export const SystemMonitorModal: React.FC<SystemMonitorModalProps> = ({
       `Système : ${stats.platform} (${stats.arch}) | Release: ${stats.release}`,
       `Hostname : ${stats.hostname}`,
       `Processeur : ${stats.cpuModel} (${stats.cpus} Cœurs)`,
-      `Moyenne de Charge : ${stats.loadavg.map((l) => l.toFixed(2)).join(", ")}`,
+      `Moyenne de Charge : ${(stats.loadavg ?? []).map((l) => l.toFixed(2)).join(", ") || "N/A"}`,
       `RAM : ${ramUsedGB} / ${ramTotalGB} (${stats.memUsagePercent}% utilisé, libre: ${ramFreeGB})`,
       `Disque : ${stats.disk ? `${formatBytes(stats.disk.used, 1)} / ${formatBytes(stats.disk.total, 1)} (${stats.disk.percent}%)` : 'N/A'}`,
       `Node.js Runtime : ${stats.nodeRuntime?.nodeVersion || process.version}`,
@@ -417,15 +417,15 @@ export const SystemMonitorModal: React.FC<SystemMonitorModalProps> = ({
                 <div className="grid grid-cols-3 gap-1 text-center text-xs font-mono text-slate-300">
                   <div className="bg-slate-950 p-1 rounded border border-slate-900">
                     <span className="text-[8px] text-slate-500 block">1 MIN</span>
-                    <span className="font-bold text-emerald-400">{stats.loadavg[0].toFixed(2)}</span>
+                    <span className="font-bold text-emerald-400">{stats.loadavg?.[0]?.toFixed(2) ?? "N/A"}</span>
                   </div>
                   <div className="bg-slate-950 p-1 rounded border border-slate-900">
                     <span className="text-[8px] text-slate-500 block">5 MIN</span>
-                    <span className="font-bold text-emerald-400">{stats.loadavg[1].toFixed(2)}</span>
+                    <span className="font-bold text-emerald-400">{stats.loadavg?.[1]?.toFixed(2) ?? "N/A"}</span>
                   </div>
                   <div className="bg-slate-950 p-1 rounded border border-slate-900">
                     <span className="text-[8px] text-slate-500 block">15 MIN</span>
-                    <span className="font-bold text-emerald-400">{stats.loadavg[2].toFixed(2)}</span>
+                    <span className="font-bold text-emerald-400">{stats.loadavg?.[2]?.toFixed(2) ?? "N/A"}</span>
                   </div>
                 </div>
               </div>

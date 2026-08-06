@@ -223,7 +223,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </div>
 
             <div className="pt-1 flex items-center justify-between text-[10px] font-mono text-slate-400">
-              <span>Charge: {systemStats.loadavg[0]?.toFixed(2)}</span>
+              <span>Charge: {systemStats.loadavg?.[0]?.toFixed(2) ?? "N/A"}</span>
               <span>Uptime: {Math.floor(systemStats.uptime / 3600)}h</span>
             </div>
           </div>

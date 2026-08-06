@@ -83,6 +83,7 @@ interface RustSystemStats {
   mem_usage_percent: number;
   uptime: number;
   os_release: string;
+  loadavg: number[];
 }
 
 /** Liste des sessions PTY (format web) — Tauri uniquement. */
@@ -134,5 +135,9 @@ export async function getSystemStatsWeb(): Promise<Record<string, unknown>> {
     memUsagePercent: s.mem_usage_percent,
     uptime: s.uptime,
     os_release: s.os_release,
+    loadavg: s.loadavg ?? [0, 0, 0],
+    cpuCores: [],
+    disk: { total: 0, free: 0, used: 0, percent: 0 },
+    processes: [],
   };
 }
