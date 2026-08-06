@@ -1,0 +1,199 @@
+// @vitest-environment node
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import http from "http";
+import fs from "fs";
+import path from "path";
+import { WebSocket } from "ws";
+import { setupWebSockets } from "../backend/sync";
+import { PtyService } from "../backend/services";
+
+// Auth désactivée par défaut en test (pas de AUTH_SECRET) → connexion
+// WebSocket acceptée sans token (comportement hérité documenté).
+
+function startServer(): Promise<{
+  server: http.Server;
+  port: number;
+  stop: () => Promise<void>;
+}> {
+  return new Promise((resolve) => {
+    const server = http.createServer((_req, res) => res.end("ok"));
+    setupWebSockets(server);
+    server.listen(0, () => {
+      const address = server.address() as { port: number };
+      resolve({
+        server,
+        port: address.port,
+        stop: () =>
+          new Promise<void>((res) => {
+            server.close(() => res());
+          }),
+      });
+    });
+  });
+}
+
+interface TestWs extends WebSocket {
+  __queue: unknown[];
+  __waiters: ((msg: unknown) => void)[];
+}
+
+function connect(port: number, path: string): Promise<TestWs> {
+  return new Promise((resolve, reject) => {
+    const ws = new WebSocket(`ws://127.0.0.1:${port}${path}`) as TestWs;
+    ws.__queue = [];
+    ws.__waiters = [];
+
+    // Bufferiser tous les messages dès la création pour éviter la race
+    // entre le "open" et le 1er message serveur (connected/output/status).
+    ws.on("message", (data) => {
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(data.toString());
+      } catch {
+        parsed = data.toString();
+      }
+      if (ws.__waiters.length > 0) {
+        const waiter = ws.__waiters.shift()!;
+        waiter(parsed);
+      } else {
+        ws.__queue.push(parsed);
+      }
+    });
+
+    ws.on("open", () => resolve(ws));
+    ws.on("error", reject);
+  });
+}
+
+function nextMessage(ws: TestWs, timeoutMs = 3000): Promise<unknown> {
+  if (ws.__queue.length > 0) {
+    return Promise.resolve(ws.__queue.shift());
+  }
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(
+      () => reject(new Error("Timeout message WS")),
+      timeoutMs
+    );
+    ws.__waiters.push((msg) => {
+      clearTimeout(timer);
+      resolve(msg);
+    });
+  });
+}
+
+describe("WebSockets (sync.ts) — flux PTY et logs", () => {
+  let env: { server: http.Server; port: number; stop: () => Promise<void> };
+  let ptyService: PtyService;
+  let createdSessionId: string;
+
+  beforeAll(async () => {
+    env = await startServer();
+    ptyService = PtyService.getInstance();
+  });
+
+  afterAll(async () => {
+    ptyService.shutdownAll();
+    if (env) await env.stop();
+  });
+
+  it("rejette une connexion vers un chemin inconnu (destroy silencieux)", async () => {
+    // Un chemin inconnu détruit la socket sans réponse
+    await new Promise<void>((resolve) => {
+      const ws = new WebSocket(`ws://127.0.0.1:${env.port}/ws/inconnu`);
+      ws.on("close", () => resolve());
+      ws.on("error", () => resolve());
+      // Timeout de sécurité
+      setTimeout(() => resolve(), 500);
+    });
+  });
+
+  it("rejette une connexion PTY sans id de session", async () => {
+    const ws = await connect(env.port, "/ws/pty");
+    const msg = (await nextMessage(ws)) as { type: string; message: string };
+    expect(msg.type).toBe("error");
+    expect(msg.message).toContain("ID de session");
+    ws.close();
+  });
+
+  it("rejette une connexion PTY avec un id inexistant", async () => {
+    const ws = await connect(env.port, "/ws/pty?id=inconnu");
+    const msg = (await nextMessage(ws)) as { type: string; message: string };
+    expect(msg.type).toBe("error");
+    expect(msg.message).toContain("Session non trouvée");
+    ws.close();
+  });
+
+  it("connecte une session PTY existante et envoie l'état connected", async () => {
+    const session = ptyService.createSession(
+      `ws_test_${Date.now()}`,
+      "Test WS",
+      process.cwd()
+    );
+    createdSessionId = session.id;
+
+    const ws = await connect(env.port, `/ws/pty?id=${session.id}`);
+    const msg = (await nextMessage(ws)) as { type: string; sessionId: string; cols: number };
+    expect(msg.type).toBe("connected");
+    expect(msg.sessionId).toBe(session.id);
+    expect(msg.cols).toBeGreaterThan(0);
+    ws.close();
+  });
+
+  it("diffuse le buffer existant à la connexion (type output)", async () => {
+    const session = ptyService.getSession(createdSessionId);
+    expect(session).toBeDefined();
+    if (!session) return;
+
+    session.buffer.push("echo depuis le buffer\n");
+
+    const ws = await connect(env.port, `/ws/pty?id=${createdSessionId}`);
+    // 1er message : connected ; 2e : output (buffer)
+    const first = (await nextMessage(ws)) as { type: string };
+    expect(first.type).toBe("connected");
+    const msg = (await nextMessage(ws)) as { type: string; data: string };
+    expect(msg.type).toBe("output");
+    expect(msg.data).toContain("echo depuis le buffer");
+    ws.close();
+  });
+
+  it("suit un fichier de log réel (status + history)", async () => {
+    // Le chemin doit rester DANS le workspace (getSafeLogPath rejette /tmp)
+    const logPath = path.join(process.cwd(), `.ws-tailer-test-${Date.now()}.log`);
+    const ws = await connect(env.port, `/ws/logs?path=${encodeURIComponent(logPath)}`);
+
+    // Le fichier vient d'être initialisé → 1er message "history" (contenu
+    // d'initialisation) puis "status" ; l'ordre peut varier selon le timing.
+    const first = (await nextMessage(ws)) as { type: string; status?: string };
+    expect(["status", "history"]).toContain(first.type);
+
+    const second = (await nextMessage(ws)) as { type: string; status?: string };
+    expect(["status", "history"]).toContain(second.type);
+    // Au moins un des deux est "status" (le tailer est actif)
+    const statusMsg = first.type === "status" ? first : second;
+    expect(statusMsg.status).toBe("tailing");
+
+    // Le fichier est créé par le tailer (écriture async → petite attente)
+    await new Promise((r) => setTimeout(r, 200));
+    expect(fs.existsSync(logPath)).toBe(true);
+
+    ws.close();
+  });
+
+  it("désinscrit le client PTY à la fermeture", async () => {
+    const session = ptyService.createSession(
+      `ws_close_${Date.now()}`,
+      "Close Test",
+      process.cwd()
+    );
+    const before = session.clients.size;
+
+    const ws = await connect(env.port, `/ws/pty?id=${session.id}`);
+    await nextMessage(ws); // connected
+    expect(session.clients.size).toBe(before + 1);
+
+    ws.close();
+    // La fermeture est async côté serveur → petite attente
+    await new Promise((r) => setTimeout(r, 100));
+    expect(session.clients.size).toBe(before);
+  });
+});
