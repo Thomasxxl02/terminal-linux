@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { apiFetch } from "../lib/api";
 import { errMsg } from "../lib/errors";
+import { isTauri, listProcessesWeb, killProcessWeb } from "../lib/tauri";
 import {
   Activity,
   Cpu,
@@ -192,6 +193,14 @@ export const SystemMonitorModal: React.FC<SystemMonitorModalProps> = ({
 
   const handleKillProcess = async (pid: number) => {
     try {
+      if (isTauri()) {
+        // Logique native Rust : SIGTERM via libc, protections PID ≤ 1 / self
+        await killProcessWeb(pid);
+        setKillMessage({ text: `✓ Le processus ${pid} a été arrêté`, isError: false });
+        setSelectedPidToKill(null);
+        onRefresh();
+        return;
+      }
       const res = await apiFetch("/api/system/kill-process", {
         method: "POST",
         headers: { "Content-Type": "application/json" },

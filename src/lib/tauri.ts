@@ -141,3 +141,15 @@ export async function getSystemStatsWeb(): Promise<Record<string, unknown>> {
     processes: [],
   };
 }
+
+/** Liste des processus système (top CPU) — Tauri uniquement. */
+export async function listProcessesWeb(): Promise<
+  { pid: number; user: string; cpu: number; mem: number; name: string }[]
+> {
+  return tauriInvoke("list_processes");
+}
+
+/** Arrête un processus (SIGTERM) — Tauri uniquement. */
+export async function killProcessWeb(pid: number): Promise<void> {
+  await tauriInvoke("kill_process", { pid });
+}

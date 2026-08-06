@@ -33,6 +33,7 @@ import {
   closePtySessionWeb,
   createPtySessionWeb,
   getSystemStatsWeb,
+  listProcessesWeb,
   isTauri,
   listPtySessionsWeb,
   tauriInvoke,
@@ -166,7 +167,9 @@ export default function App() {
     try {
       if (isTauri()) {
         const data = await getSystemStatsWeb();
-        setSystemStats(data as unknown as SystemStats);
+        // Liste des processus en parallèle (top CPU, logique Rust native)
+        const processes = await listProcessesWeb();
+        setSystemStats({ ...(data as unknown as SystemStats), processes } as SystemStats);
         return;
       }
       const res = await apiFetch("/api/system/stats");

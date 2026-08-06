@@ -3301,6 +3301,7 @@ dependencies = [
  "env_logger",
  "keyring",
  "lazy_static",
+ "libc",
  "log",
  "num_cpus",
  "portable-pty",

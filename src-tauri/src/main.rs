@@ -35,7 +35,9 @@ fn main() {
             fs_delete,
             fs_rename,
             check_port,
-            check_shells
+            check_shells,
+            list_processes,
+            kill_process
         ])
         .run(tauri::generate_context!())
         .expect("Erreur lors du démarrage de l'application Tauri & Rust Terminal");
