@@ -33,6 +33,8 @@ interface SidebarProps {
   onCreateSession: () => void;
   onCloseSession: (id: string) => void;
   systemStats: SystemStats | null;
+  userRole?: string | null;
+  onLogout?: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -44,6 +46,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onCreateSession,
   onCloseSession,
   systemStats,
+  userRole,
+  onLogout,
 }) => {
   const navItems = [
     { id: "terminal", label: "Terminaux PTY", icon: Terminal },
@@ -227,6 +231,36 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <div className="animate-pulse h-8 bg-slate-800/50 rounded"></div>
         )}
       </div>
+
+      {/* Badge rôle + logout (mode web authentifié uniquement) */}
+      {userRole && onLogout && (
+        <div className="p-3 border-t border-slate-800/80 bg-slate-950/60">
+          <div className="flex items-center justify-between gap-2">
+            <span className="flex items-center gap-1.5 text-[10px] font-mono">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+              <span className="text-slate-400">Rôle :</span>
+              <span
+                className={`px-1.5 py-0.5 rounded font-bold uppercase text-[9px] ${
+                  userRole === "admin"
+                    ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30"
+                    : userRole === "developer"
+                    ? "bg-blue-500/15 text-blue-400 border border-blue-500/30"
+                    : "bg-slate-800 text-slate-400 border border-slate-700"
+                }`}
+              >
+                {userRole}
+              </span>
+            </span>
+            <button
+              onClick={onLogout}
+              title="Se déconnecter (révoque le JWT)"
+              className="px-2 py-1 text-[10px] font-mono text-red-400 hover:text-red-300 hover:bg-red-500/10 border border-red-900/40 rounded transition-colors"
+            >
+              Déconnexion
+            </button>
+          </div>
+        </div>
+      )}
     </aside>
   );
 };

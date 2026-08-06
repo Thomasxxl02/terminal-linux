@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 const MAX_READ_SIZE: u64 = 2 * 1024 * 1024; // 2 Mo
 const MAX_TREE_ITEMS: usize = 300;

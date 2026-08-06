@@ -1,15 +1,8 @@
 use keyring::Entry;
-use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
 /// Service name utilisé dans le keyring OS (GNOME Keyring / Keychain / Credential Manager)
 const KEYRING_SERVICE: &str = "com.tauri.linuxterminal";
-
-#[derive(Serialize, Deserialize)]
-pub struct SecretEntry {
-    pub key: String,
-    pub value: String,
-}
 
 fn entry_for(key: &str) -> Result<Entry, String> {
     Entry::new(KEYRING_SERVICE, key).map_err(|e| format!("Erreur keyring (création) : {}", e))

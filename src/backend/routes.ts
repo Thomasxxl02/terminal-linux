@@ -20,6 +20,7 @@ import {
 } from "./security";
 import {
   handleLogin,
+  handleLogout,
   requireAuth,
 } from "./auth";
 
@@ -53,6 +54,7 @@ router.use(apiLimiter);
 
 // 0. Auth APIs + Health (publics — pas de JWT requis)
 router.post("/auth/login", handleLogin);
+router.post("/auth/logout", handleLogout);
 router.get("/health", (req, res) => {
   res.json({ status: "ok", service: "Tauri Terminal PTY Backend" });
 });

@@ -19,8 +19,10 @@ import {
   apiFetch,
   clearAuth,
   getToken,
+  getRole,
   isAuthenticated,
   login,
+  logout,
   setAuth,
 } from "./lib/api";
 import { AuthScreen } from "./components/AuthScreen";
@@ -50,6 +52,8 @@ export default function App() {
   // Auth state : l'app affiche l'écran de connexion si le serveur exige un JWT
   const [authChecked, setAuthChecked] = useState<boolean>(false);
   const [authRequired, setAuthRequired] = useState<boolean>(true);
+  // Rôle réactif (mis à jour au login/logout pour le badge Sidebar)
+  const [userRole, setUserRole] = useState<string | null>(() => getRole());
 
   // File path state to open directly into Monaco Editor
   const [monacoFilePath, setMonacoFilePath] = useState<string>("");
@@ -153,6 +157,7 @@ export default function App() {
   const handleLogin = useCallback(async (staticToken: string) => {
     const result = await login(staticToken);
     setAuth(result.token, result.role);
+    setUserRole(result.role);
     if (!result.authEnabled) {
       // Serveur sans AUTH_SECRET : pas de JWT requis, tout passe
       setAuthRequired(false);
@@ -163,6 +168,15 @@ export default function App() {
     fetchSessions();
     fetchSystemStats();
   }, [fetchSessions, fetchSystemStats]);
+
+  // Logout : révoque le JWT (blacklist serveur) et retourne à l'écran de connexion
+  const handleLogout = useCallback(async () => {
+    await logout();
+    setUserRole(null);
+    setAuthRequired(true);
+    setAuthChecked(true);
+    setSessions([]);
+  }, []);
 
   // Fetch System Statistics
   const fetchSystemStats = useCallback(async () => {
@@ -398,6 +412,8 @@ export default function App() {
           onCreateSession={handleCreateSession}
           onCloseSession={handleCloseSession}
           systemStats={systemStats}
+          userRole={userRole}
+          onLogout={handleLogout}
         />
       )}
 

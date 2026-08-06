@@ -85,4 +85,35 @@ describe("Auth API", () => {
     const res = await request(app).get("/api/health");
     expect(res.status).toBe(200);
   });
+
+  it("logout révoque le JWT (token rejeté ensuite)", async () => {
+    const loginRes = await request(app)
+      .post("/api/auth/login")
+      .send({ token: "static-admin-token" });
+    const jwt = loginRes.body.token;
+
+    // Le token fonctionne avant logout
+    const before = await request(app)
+      .get("/api/pty/sessions")
+      .set("Authorization", `Bearer ${jwt}`);
+    expect(before.status).toBe(200);
+
+    // Logout → révocation
+    const logoutRes = await request(app)
+      .post("/api/auth/logout")
+      .set("Authorization", `Bearer ${jwt}`);
+    expect(logoutRes.status).toBe(200);
+
+    // Le même token est maintenant rejeté (blacklist jti)
+    const after = await request(app)
+      .get("/api/pty/sessions")
+      .set("Authorization", `Bearer ${jwt}`);
+    expect(after.status).toBe(401);
+  });
+
+  it("logout sans token ne lève pas d'erreur", async () => {
+    const res = await request(app).post("/api/auth/logout");
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+  });
 });

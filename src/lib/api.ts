@@ -43,6 +43,21 @@ export async function login(staticToken: string): Promise<{ token: string; role:
   return res.json();
 }
 
+/**
+ * Logout : révoque le JWT côté serveur (blacklist jti) puis efface
+ * le token et le rôle localement. Ne lève pas si le serveur est injoignable
+ * (le nettoyage local suffit dans ce cas).
+ */
+export async function logout(): Promise<void> {
+  try {
+    await apiFetch("/api/auth/logout", { method: "POST" });
+  } catch (e) {
+    console.warn("[api] Logout serveur indisponible, nettoyage local uniquement", e);
+  } finally {
+    clearAuth();
+  }
+}
+
 /** Fetch avec JWT injecté automatiquement. */
 export async function apiFetch(url: string, options: RequestInit = {}): Promise<Response> {
   const headers = new Headers(options.headers || {});
