@@ -64,7 +64,13 @@ describe("Backend Services Unit Tests", () => {
 
       // Developers and guests are blocked from restricted paths
       expect(PermissionService.validatePathAccess("/etc/shadow", "developer")).toBe(false);
-      expect(PermissionService.validatePathAccess("/root/.bashrc", "guest")).toBe(false);
+      expect(PermissionService.validatePathAccess("/etc/ssh/sshd_config", "guest")).toBe(false);
+      expect(PermissionService.validatePathAccess("/usr/bin/sudo", "guest")).toBe(false);
+      expect(PermissionService.validatePathAccess("/boot/vmlinuz", "developer")).toBe(false);
+
+      // /root n'est PAS bloqué : le projet peut tourner depuis /root (VPS)
+      // et bloquerait sinon TOUTES les écritures non-admin.
+      expect(PermissionService.validatePathAccess("/root/.bashrc", "guest")).toBe(true);
 
       // Safe user-space directories are allowed
       expect(PermissionService.validatePathAccess("/home/user/document.txt", "developer")).toBe(true);

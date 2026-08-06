@@ -232,12 +232,23 @@ export class PermissionService {
 
   public static validatePathAccess(targetPath: string, role: string): boolean {
     if (role === "admin") return true;
-    
-    // Developer or guest shouldn't manipulate root critical directories
+
+    // Dev/guest ne doivent pas toucher aux répertoires système critiques.
+    // NB : "/root" n'est PAS dans la liste — le projet peut tourner depuis
+    // /root/... (VPS root) et bloquerait TOUTES les écritures non-admin.
     const normalized = path.normalize(targetPath);
-    const restrictedPaths = ["/etc/shadow", "/etc/passwd", "/boot", "/root"];
+    const restrictedPaths = [
+      "/etc/shadow",
+      "/etc/passwd",
+      "/etc/ssh",
+      "/boot",
+      "/bin",
+      "/sbin",
+      "/usr/bin",
+      "/usr/sbin",
+    ];
     for (const restricted of restrictedPaths) {
-      if (normalized.startsWith(restricted)) {
+      if (normalized === restricted || normalized.startsWith(restricted + "/")) {
         return false;
       }
     }

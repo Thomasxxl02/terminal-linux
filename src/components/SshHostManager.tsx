@@ -496,6 +496,8 @@ export const SshHostManager: React.FC<SshHostManagerProps> = ({
                   <Tooltip content="Copier la commande de connexion SSH" position="top">
                     <button
                       onClick={() => handleCopyCommand(host)}
+                      title="Copier la commande de connexion SSH"
+                      aria-label="Copier la commande de connexion SSH"
                       className="p-1.5 text-slate-400 hover:text-slate-200 hover:bg-slate-800 rounded transition-colors"
                     >
                       {copiedId === host.id ? (
@@ -509,6 +511,8 @@ export const SshHostManager: React.FC<SshHostManagerProps> = ({
                   <Tooltip content="Tester la connectivité (ping)" position="top">
                     <button
                       onClick={() => handlePingTest(host)}
+                      title="Tester la connectivité (ping)"
+                      aria-label="Tester la connectivité (ping)"
                       className="p-1.5 text-slate-400 hover:text-slate-200 hover:bg-slate-800 rounded transition-colors"
                     >
                       <Radio className="w-3.5 h-3.5" />
@@ -518,6 +522,8 @@ export const SshHostManager: React.FC<SshHostManagerProps> = ({
                   <Tooltip content="Modifier la configuration" position="top">
                     <button
                       onClick={() => handleOpenEditModal(host)}
+                      title="Modifier la configuration"
+                      aria-label="Modifier la configuration"
                       className="p-1.5 text-slate-400 hover:text-slate-200 hover:bg-slate-800 rounded transition-colors"
                     >
                       <Edit2 className="w-3.5 h-3.5" />
@@ -527,6 +533,8 @@ export const SshHostManager: React.FC<SshHostManagerProps> = ({
                   <Tooltip content="Supprimer de la liste locale" position="top">
                     <button
                       onClick={() => handleDeleteHost(host.id)}
+                      title="Supprimer de la liste locale"
+                      aria-label="Supprimer de la liste locale"
                       className="p-1.5 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded transition-colors"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
