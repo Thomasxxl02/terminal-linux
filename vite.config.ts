@@ -25,6 +25,24 @@ export default defineConfig(() => {
       // Disable file watching when DISABLE_HMR is true to save CPU during agent edits.
       watch: process.env.DISABLE_HMR === "true" ? null : {},
     },
+    build: {
+      // Chunking manuel : React, xterm et Monaco en chunks séparés (cache
+      // navigateur + parallélisme). Les vues sont déjà en lazy-load.
+      rollupOptions: {
+        output: {
+          manualChunks(id) {
+            if (id.includes("node_modules")) {
+              if (id.includes("xterm")) return "xterm";
+              if (id.includes("monaco-editor") || id.includes("@monaco-editor")) return "monaco";
+              if (id.includes("react") || id.includes("react-dom") || id.includes("scheduler")) return "react";
+              if (id.includes("lucide-react")) return "icons";
+            }
+            return undefined;
+          },
+        },
+      },
+      chunkSizeWarningLimit: 700,
+    },
     test: {
       globals: true,
       environment: 'jsdom',

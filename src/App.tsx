@@ -1,19 +1,22 @@
-import React, { useEffect, useState, useCallback, Suspense, lazy } from "react";
+import React, { useEffect, useState, useCallback, Suspense } from "react";
 import { Sidebar } from "./components/Sidebar";
 import { TerminalTabs } from "./components/TerminalTabs";
 import { TerminalView } from "./components/TerminalView";
-import { MaintenanceHub } from "./components/MaintenanceHub";
-import { TauriRustArchitect } from "./components/TauriRustArchitect";
-import { SnippetsLibrary } from "./components/SnippetsLibrary";
-import { SkillsHub } from "./components/SkillsHub";
-import { SystemMonitorModal } from "./components/SystemMonitorModal";
+import {
+  LazyMaintenanceHub,
+  LazyTauriRustArchitect,
+  LazySnippetsLibrary,
+  LazySkillsHub,
+  LazySystemMonitorModal,
+  LazyProfileManager,
+  LazyPlaybookSequencer,
+  LazySshHostManager,
+  LazySshTunnelManager,
+  LazyLogsStreamer,
+  LazyWebShortcutsManager,
+  LazyMonacoFileEditor,
+} from "./components/lazy";
 import { CommandPalette } from "./components/CommandPalette";
-import { ProfileManager } from "./components/ProfileManager";
-import { PlaybookSequencer } from "./components/PlaybookSequencer";
-import { SshHostManager } from "./components/SshHostManager";
-import { SshTunnelManager } from "./components/SshTunnelManager";
-import { LogsStreamer } from "./components/LogsStreamer";
-import { WebShortcutsManager } from "./components/WebShortcutsManager";
 import { TerminalSessionInfo, SystemStats, ShellProfile, SavedTabSession, SshHost } from "./types";
 import {
   apiFetch,
@@ -35,10 +38,15 @@ import {
   tauriInvoke,
 } from "./lib/tauri";
 
-
-const MonacoFileEditor = lazy(() =>
-  import("./components/MonacoFileEditor").then((m) => ({ default: m.MonacoFileEditor }))
-);
+/** Fallback de chargement affiché pendant le lazy-load d'une vue. */
+function ViewFallback({ label }: { label: string }) {
+  return (
+    <div className="flex flex-col items-center justify-center h-full text-slate-400 font-mono text-xs bg-slate-950 p-6 space-y-3">
+      <div className="w-6 h-6 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin" />
+      <p>Chargement : {label}...</p>
+    </div>
+  );
+}
 
 export default function App() {
   const [activeView, setActiveView] = useState<string>("terminal");
@@ -517,85 +525,104 @@ export default function App() {
         )}
 
         {activeView === "ssh" && (
-          <SshHostManager
-            onExecuteInTerminal={handleExecuteInTerminal}
-            onLaunchSshSession={handleLaunchSshSession}
-            sessions={sessions}
-            activeSessionId={activeSessionId}
-          />
+          <Suspense fallback={<ViewFallback label="Carnet SSH" />}>
+            <LazySshHostManager
+              onExecuteInTerminal={handleExecuteInTerminal}
+              onLaunchSshSession={handleLaunchSshSession}
+              sessions={sessions}
+              activeSessionId={activeSessionId}
+            />
+          </Suspense>
         )}
 
         {activeView === "tunnels" && (
-          <SshTunnelManager
-            onExecuteInTerminal={handleExecuteInTerminal}
-            sessions={sessions}
-            activeSessionId={activeSessionId}
-          />
+          <Suspense fallback={<ViewFallback label="Tunnels" />}>
+            <LazySshTunnelManager
+              onExecuteInTerminal={handleExecuteInTerminal}
+              sessions={sessions}
+              activeSessionId={activeSessionId}
+            />
+          </Suspense>
         )}
 
         {activeView === "profiles" && (
-          <ProfileManager
-            onLaunchProfile={handleLaunchProfile}
-            activeSessions={sessions}
-            onRestoreSavedTabs={handleRestoreSavedTabs}
-          />
+          <Suspense fallback={<ViewFallback label="Profils" />}>
+            <LazyProfileManager
+              onLaunchProfile={handleLaunchProfile}
+              activeSessions={sessions}
+              onRestoreSavedTabs={handleRestoreSavedTabs}
+            />
+          </Suspense>
         )}
 
         {activeView === "playbooks" && (
-          <PlaybookSequencer
-            sessions={sessions}
-            activeSessionId={activeSessionId}
-            onExecuteCommandInTerminal={handleExecuteInTerminal}
-            onOpenTerminalView={() => setActiveView("terminal")}
-          />
+          <Suspense fallback={<ViewFallback label="Playbooks" />}>
+            <LazyPlaybookSequencer
+              sessions={sessions}
+              activeSessionId={activeSessionId}
+              onExecuteCommandInTerminal={handleExecuteInTerminal}
+              onOpenTerminalView={() => setActiveView("terminal")}
+            />
+          </Suspense>
         )}
 
         {activeView === "maintenance" && (
-          <MaintenanceHub
-            sessions={sessions}
-            activeSessionId={activeSessionId}
-            onExecuteInTerminal={handleExecuteInTerminal}
-          />
+          <Suspense fallback={<ViewFallback label="Maintenance" />}>
+            <LazyMaintenanceHub
+              sessions={sessions}
+              activeSessionId={activeSessionId}
+              onExecuteInTerminal={handleExecuteInTerminal}
+            />
+          </Suspense>
         )}
 
         {activeView === "monaco" && (
-          <Suspense
-            fallback={
-              <div className="flex flex-col items-center justify-center h-full text-slate-400 font-mono text-xs bg-slate-950 p-6 space-y-3">
-                <div className="w-6 h-6 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin" />
-                <p>Chargement de l'éditeur Monaco...</p>
-              </div>
-            }
-          >
-            <MonacoFileEditor
+          <Suspense fallback={<ViewFallback label="Éditeur Monaco" />}>
+            <LazyMonacoFileEditor
               onExecuteInTerminal={handleExecuteInTerminal}
               initialFilePath={monacoFilePath}
             />
           </Suspense>
         )}
 
-        {activeView === "logs" && <LogsStreamer />}
+        {activeView === "logs" && (
+          <Suspense fallback={<ViewFallback label="Logs" />}>
+            <LazyLogsStreamer />
+          </Suspense>
+        )}
 
-        {activeView === "tauri" && <TauriRustArchitect />}
+        {activeView === "tauri" && (
+          <Suspense fallback={<ViewFallback label="Architecture Rust" />}>
+            <LazyTauriRustArchitect />
+          </Suspense>
+        )}
 
         {activeView === "skills" && (
-          <SkillsHub onExecuteInTerminal={handleExecuteInTerminal} />
+          <Suspense fallback={<ViewFallback label="Skills" />}>
+            <LazySkillsHub onExecuteInTerminal={handleExecuteInTerminal} />
+          </Suspense>
         )}
 
         {activeView === "snippets" && (
-          <SnippetsLibrary onExecuteInTerminal={handleExecuteInTerminal} />
+          <Suspense fallback={<ViewFallback label="Snippets" />}>
+            <LazySnippetsLibrary onExecuteInTerminal={handleExecuteInTerminal} />
+          </Suspense>
         )}
 
         {activeView === "bookmarks" && (
-          <WebShortcutsManager
-            onExecuteInTerminal={handleExecuteInTerminal}
-            sessions={sessions}
-            activeSessionId={activeSessionId}
-          />
+          <Suspense fallback={<ViewFallback label="Raccourcis Web" />}>
+            <LazyWebShortcutsManager
+              onExecuteInTerminal={handleExecuteInTerminal}
+              sessions={sessions}
+              activeSessionId={activeSessionId}
+            />
+          </Suspense>
         )}
 
         {activeView === "stats" && (
-          <SystemMonitorModal stats={systemStats} onRefresh={fetchSystemStats} />
+          <Suspense fallback={<ViewFallback label="Ressources" />}>
+            <LazySystemMonitorModal stats={systemStats} onRefresh={fetchSystemStats} />
+          </Suspense>
         )}
       </main>
     </div>
