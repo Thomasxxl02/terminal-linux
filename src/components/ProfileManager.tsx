@@ -30,7 +30,7 @@ const DEFAULT_PROFILES: ShellProfile[] = [
     id: "profile_bash_default",
     name: "Bash Standard (Dev)",
     shell: "/bin/bash",
-    cwd: process.cwd ? process.cwd() : "/",
+    cwd: typeof process !== "undefined" && process.cwd ? process.cwd() : "/",
     env: {
       COLORTERM: "truecolor",
       TERM: "xterm-256color",

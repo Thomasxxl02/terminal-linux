@@ -222,7 +222,7 @@ export const SystemMonitorModal: React.FC<SystemMonitorModalProps> = ({
       `Moyenne de Charge : ${(stats.loadavg ?? []).map((l) => l.toFixed(2)).join(", ") || "N/A"}`,
       `RAM : ${ramUsedGB} / ${ramTotalGB} (${stats.memUsagePercent}% utilisé, libre: ${ramFreeGB})`,
       `Disque : ${stats.disk ? `${formatBytes(stats.disk.used, 1)} / ${formatBytes(stats.disk.total, 1)} (${stats.disk.percent}%)` : 'N/A'}`,
-      `Node.js Runtime : ${stats.nodeRuntime?.nodeVersion || process.version}`,
+      `Node.js Runtime : ${stats.nodeRuntime?.nodeVersion || (typeof process !== "undefined" ? process.version : "N/A")}`,
       `Uptime : ${formatUptime(stats.uptime)}`,
       `Interfaces Réseau : ${(stats.networkInterfaces || []).map(i => `${i.name} (${i.address})`).join(", ")}`,
     ];
@@ -636,7 +636,7 @@ export const SystemMonitorModal: React.FC<SystemMonitorModalProps> = ({
                 <Layers className="w-4 h-4" /> Node.js Environment
               </div>
               <div className="text-lg font-bold text-slate-100 font-mono">
-                {stats.nodeRuntime?.nodeVersion || process.version}
+                {stats.nodeRuntime?.nodeVersion || (typeof process !== "undefined" ? process.version : "N/A")}
               </div>
               <div className="text-[10px] text-slate-500 font-mono">
                 Moteur V8 : {stats.nodeRuntime?.v8Version || "Non spécifié"}

@@ -32,6 +32,7 @@ import { TerminalSessionInfo, TerminalTheme, FileTreeItem } from "../types";
 import { TERMINAL_THEMES } from "../constants/themes";
 import { apiFetch, wsUrlWithToken } from "../lib/api";
 import { errMsg } from "../lib/errors";
+import { fsTree } from "../lib/fsApi";
 import { isTauri, tauriInvoke, tauriListen, PtyOutputEvent } from "../lib/tauri";
 interface TerminalViewProps {
   session: TerminalSessionInfo;
@@ -68,7 +69,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
 
   // Synchronized File Explorer Side Drawer
   const [showExplorer, setShowExplorer] = useState<boolean>(false);
-  const [explorerPath, setExplorerPath] = useState<string>(session.cwd || process.cwd());
+  const [explorerPath, setExplorerPath] = useState<string>(session.cwd || (typeof process !== "undefined" ? process.cwd() : "/"));
   const [explorerParent, setExplorerParent] = useState<string>("");
   const [fileItems, setFileItems] = useState<FileTreeItem[]>([]);
   const [loadingExplorer, setLoadingExplorer] = useState<boolean>(false);
@@ -148,14 +149,13 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
     }
   };
 
-  // Fetch Synchronized File Explorer Tree
+  // Fetch Synchronized File Explorer Tree (fsApi unifié : Rust en Tauri,
+  // /api/fs/tree en web — mêmes règles de sécurité)
   const fetchExplorerTree = useCallback(async (targetDir?: string) => {
     setLoadingExplorer(true);
     try {
-      const dirPath = targetDir || session.cwd || process.cwd();
-      const url = `/api/fs/tree?path=${encodeURIComponent(dirPath)}`;
-      const res = await apiFetch(url);
-      const data = await res.json();
+      const dirPath = targetDir || session.cwd || (typeof process !== "undefined" ? process.cwd() : "/");
+      const data = await fsTree(dirPath);
       if (data.items) {
         setFileItems(data.items);
         setExplorerPath(data.currentPath);
