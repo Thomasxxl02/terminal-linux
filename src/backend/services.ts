@@ -3,7 +3,6 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 import { WebSocket } from "ws";
-import * as db from "./db";
 
 // Liste blanche de shells autorisés, sous forme de mapping statique.
 // L'input utilisateur est utilisé UNIQUEMENT comme clé de lookup :
@@ -214,25 +213,9 @@ export class PtyService {
   }
 }
 
-// 2. Terminal Maintenance Management Service
-export class MaintenanceService {
-  public static getMaintenanceCommand(task: string): string {
-    switch (task) {
-      case "apt-update":
-        return "echo '[MAINTENANCE] Mise à jour des paquets...' && apt-get update || echo '[Note] Mode utilisateur sans privilèges apt'\n";
-      case "apt-clean":
-        return "echo '[MAINTENANCE] Nettoyage du cache...' && apt-get clean || rm -rf /tmp/* ~/.cache/* 2>/dev/null && echo '[OK] Cache utilisateur nettoyé'\n";
-      case "logs-purge":
-        return "echo '[MAINTENANCE] Purge des fichiers journaux obsolètes...' && du -sh /var/log 2>/dev/null; find /var/log -type f -name '*.log' -size +10M -delete 2>/dev/null; echo '[OK] Logs purgés'\n";
-      case "disk-space":
-        return "df -h && echo '--- Occupation des sous-dossiers ---' && du -sh ./* 2>/dev/null | sort -hr | head -n 10\n";
-      case "top-processes":
-        return "ps aux --sort=-%cpu | head -n 12\n";
-      default:
-        return "echo '[MAINTENANCE] Tâche non autorisée ou non reconnue'\n";
-    }
-  }
-}
+// 2. (MaintenanceService supprimé — route /system/maintenance jamais appelée
+//    par le frontend, service orphelin. Les commandes de maintenance sont
+//    gérées côté UI via localStorage + terminal.)
 
 // 3. Permission Engine / RBAC Policy Checks (Permissions Logic)
 export class PermissionService {
@@ -259,34 +242,5 @@ export class PermissionService {
       }
     }
     return true;
-  }
-}
-
-// 4. Synchronization Logic & State Reconciliation (Sync Logic)
-export class SynchronizationService {
-  public static async syncEntity(
-    entityType: "ssh_host" | "snippet" | "playbook",
-    entityId: string,
-    action: "create" | "update" | "delete",
-    details?: string
-  ): Promise<void> {
-    // 1. Audit logs persisted into PostgreSQL
-    await db.insertSyncLog({
-      entity_type: entityType,
-      entity_id: entityId,
-      action,
-      details: details || `Reconciled ${action} on ${entityType} ID: ${entityId}`
-    });
-    console.log(`[SYNC RECONCILIATION] Successfully recorded sync: ${action} on ${entityType}`);
-  }
-
-  public static async getSynchronizationReport() {
-    const logs = await db.fetchSyncLogs();
-    return {
-      status: "synchronized",
-      lastSync: logs.length > 0 ? logs[0].performed_at : new Date(),
-      totalRecordsSynced: logs.length,
-      logs
-    };
   }
 }

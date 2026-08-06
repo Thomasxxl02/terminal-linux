@@ -11,7 +11,6 @@ dotenv.config();
 
 import router from "./src/backend/routes";
 import { setupWebSockets } from "./src/backend/sync";
-import { initializeDatabaseSchema } from "./src/backend/db";
 import { PtyService } from "./src/backend/services";
 
 export const app = express();
@@ -83,8 +82,8 @@ function startSimulatedLogs() {
 }
 
 async function startServer() {
-  // Initialize Database schemas (PostgreSQL connection setup)
-  await initializeDatabaseSchema();
+  // (Initialisation PostgreSQL supprimée : db.ts retiré — le frontend
+  //  utilise localStorage/keyring, aucune table n'est requise.)
 
   // Start background logging
   startSimulatedLogs();

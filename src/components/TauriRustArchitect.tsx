@@ -40,7 +40,6 @@ const TABS: ArchitectureTab[] = [
       { key: "servicesTs", label: "src/backend/services.ts" },
       { key: "syncTs", label: "src/backend/sync.ts" },
       { key: "securityTs", label: "src/backend/security.ts" },
-      { key: "dbTs", label: "src/backend/db.ts" },
     ],
   },
   {

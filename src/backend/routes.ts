@@ -4,12 +4,9 @@ import path from "path";
 import os from "os";
 import { exec } from "child_process";
 import rateLimit from "express-rate-limit";
-import * as db from "./db";
 import {
   PtyService,
-  MaintenanceService,
   PermissionService,
-  SynchronizationService,
 } from "./services";
 import {
   errMsg,
@@ -348,31 +345,6 @@ router.post("/system/kill-process", writeLimiter, (req, res) => {
   }
 });
 
-router.post("/system/maintenance", writeLimiter, (req, res) => {
-  try {
-    const { task, sessionId } = req.body;
-    const validatedTask = validateString(task, "task");
-    const validatedSessionId = validateString(sessionId, "sessionId");
-
-    // Whitelist check to prevent uncontrolled command injection
-    const whitelistedTasks = ["apt-update", "apt-clean", "logs-purge", "disk-space", "top-processes"];
-    if (!whitelistedTasks.includes(validatedTask)) {
-      return res.status(400).json({ error: "Tâche de maintenance non valide" });
-    }
-
-    const session = ptyService.getSession(validatedSessionId);
-    if (!session) {
-      return res.status(400).json({ error: "Veuillez sélectionner un terminal actif pour exécuter la maintenance." });
-    }
-
-    // Formulates command using maintenance service (Business logic)
-    const command = MaintenanceService.getMaintenanceCommand(validatedTask);
-    session.process.stdin.write(command);
-    res.json({ success: true, message: "Commande envoyée au terminal", command });
-  } catch (err) {
-    res.status(400).json({ error: errMsg(err) });
-  }
-});
 
 // 4. Local File System APIs
 router.get("/fs/tree", async (req, res) => {
@@ -534,147 +506,6 @@ router.post("/fs/rename", writeLimiter, async (req, res) => {
   }
 });
 
-// 6. PostgreSQL Synchronized Tables REST APIs
-// Exposes the real/mock PostgreSQL client to UI while ensuring sync logs
-router.get("/db/hosts", async (req, res) => {
-  try {
-    const hosts = await db.fetchAllSshHosts();
-    res.json({ hosts });
-  } catch (err) {
-    res.status(500).json({ error: errMsg(err) });
-  }
-});
-
-router.post("/db/hosts", writeLimiter, async (req, res) => {
-  try {
-    const { name, host, port, username, description } = req.body;
-    const validatedName = validateString(name, "name");
-    const validatedHost = validateString(host, "host");
-    const validatedPort = Number(port) || 22;
-    const validatedUsername = validateString(username, "username");
-    const validatedDesc = validateOptionalString(description, "description") || "";
-
-    const id = `host_${Date.now()}`;
-    const newHost = { id, name: validatedName, host: validatedHost, port: validatedPort, username: validatedUsername, description: validatedDesc };
-    
-    // DB write + Sync event logger
-    await db.insertSshHost(newHost);
-    await SynchronizationService.syncEntity("ssh_host", id, "create", `Création de l'hôte ${validatedName}`);
-    
-    res.json({ success: true, host: newHost });
-  } catch (err) {
-    res.status(500).json({ error: errMsg(err) });
-  }
-});
-
-router.delete("/db/hosts/:id", writeLimiter, async (req, res) => {
-  try {
-    const { id } = req.params;
-    const validatedId = validateString(id, "id");
-
-    await db.deleteSshHost(validatedId);
-    await SynchronizationService.syncEntity("ssh_host", validatedId, "delete", "Suppression de l'hôte");
-    res.json({ success: true });
-  } catch (err) {
-    res.status(500).json({ error: errMsg(err) });
-  }
-});
-
-router.get("/db/snippets", async (req, res) => {
-  try {
-    const snippets = await db.fetchAllSnippets();
-    res.json({ snippets });
-  } catch (err) {
-    res.status(500).json({ error: errMsg(err) });
-  }
-});
-
-router.post("/db/snippets", writeLimiter, async (req, res) => {
-  try {
-    const { title, command, category, description } = req.body;
-    const validatedTitle = validateString(title, "title");
-    const validatedCommand = validateString(command, "command");
-    const validatedCategory = validateString(category, "category");
-    const validatedDesc = validateOptionalString(description, "description") || "";
-
-    const id = `snip_${Date.now()}`;
-    const newSnippet = { id, title: validatedTitle, command: validatedCommand, category: validatedCategory, description: validatedDesc };
-
-    await db.insertSnippet(newSnippet);
-    await SynchronizationService.syncEntity("snippet", id, "create", `Ajout du snippet ${validatedTitle}`);
-
-    res.json({ success: true, snippet: newSnippet });
-  } catch (err) {
-    res.status(500).json({ error: errMsg(err) });
-  }
-});
-
-router.delete("/db/snippets/:id", writeLimiter, async (req, res) => {
-  try {
-    const { id } = req.params;
-    const validatedId = validateString(id, "id");
-
-    await db.deleteSnippet(validatedId);
-    await SynchronizationService.syncEntity("snippet", validatedId, "delete", "Suppression de snippet");
-    res.json({ success: true });
-  } catch (err) {
-    res.status(500).json({ error: errMsg(err) });
-  }
-});
-
-router.get("/db/playbooks", async (req, res) => {
-  try {
-    const playbooks = await db.fetchAllPlaybooks();
-    res.json({ playbooks });
-  } catch (err) {
-    res.status(500).json({ error: errMsg(err) });
-  }
-});
-
-router.post("/db/playbooks", writeLimiter, async (req, res) => {
-  try {
-    const { name, steps } = req.body;
-    const validatedName = validateString(name, "name");
-    
-    // Ensure steps are secure and typed correctly
-    if (!Array.isArray(steps)) {
-      return res.status(400).json({ error: "Le paramètre 'steps' doit être un tableau" });
-    }
-
-    const id = `play_${Date.now()}`;
-    const newPlaybook = { id, name: validatedName, steps };
-
-    await db.insertPlaybook(newPlaybook);
-    await SynchronizationService.syncEntity("playbook", id, "create", `Création du playbook ${validatedName}`);
-
-    res.json({ success: true, playbook: newPlaybook });
-  } catch (err) {
-    res.status(500).json({ error: errMsg(err) });
-  }
-});
-
-router.delete("/db/playbooks/:id", writeLimiter, async (req, res) => {
-  try {
-    const { id } = req.params;
-    const validatedId = validateString(id, "id");
-
-    await db.deletePlaybook(validatedId);
-    await SynchronizationService.syncEntity("playbook", validatedId, "delete", "Suppression de playbook");
-    res.json({ success: true });
-  } catch (err) {
-    res.status(500).json({ error: errMsg(err) });
-  }
-});
-
-router.get("/db/sync-report", async (req, res) => {
-  try {
-    const report = await SynchronizationService.getSynchronizationReport();
-    res.json(report);
-  } catch (err) {
-    res.status(500).json({ error: errMsg(err) });
-  }
-});
-
 // 6b. Vérification RÉELLE d'un port local (bind test — remplace l'ancienne table simulée)
 router.get("/network/port-check", (req, res) => {
   const rawPort = req.query.port;
@@ -765,7 +596,6 @@ router.get("/tauri/source", (req, res) => {
     result.servicesTs = readFile(path.join(backend, "services.ts"));
     result.syncTs = readFile(path.join(backend, "sync.ts"));
     result.securityTs = readFile(path.join(backend, "security.ts"));
-    result.dbTs = readFile(path.join(backend, "db.ts"));
   } else if (group === "frontend") {
     const src = path.join(root, "src");
     result.appTsx = readFile(path.join(src, "App.tsx"));

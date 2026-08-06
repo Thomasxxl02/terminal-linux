@@ -76,7 +76,6 @@ pub fn get_source_code(group: String) -> Result<serde_json::Value, String> {
             insert(&mut out, "servicesTs", backend.join("services.ts"));
             insert(&mut out, "syncTs", backend.join("sync.ts"));
             insert(&mut out, "securityTs", backend.join("security.ts"));
-            insert(&mut out, "dbTs", backend.join("db.ts"));
         }
         "frontend" => {
             let src = project_root.join("src");
