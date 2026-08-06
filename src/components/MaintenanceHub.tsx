@@ -25,6 +25,7 @@ import {
 } from "lucide-react";
 import { MAINTENANCE_TASKS } from "../constants/snippets";
 import { TerminalSessionInfo } from "../types";
+import { useSecureStorage } from "../hooks/useSecureStorage";
 
 interface MaintenanceHubProps {
   sessions: TerminalSessionInfo[];
@@ -39,6 +40,24 @@ interface CustomMacro {
   description: string;
   category: string;
 }
+
+/** Macros par défaut — utilisées tant que l'utilisateur n'en a pas créé. */
+const DEFAULT_MACROS: CustomMacro[] = [
+  {
+    id: "custom_1",
+    title: "Intégrité Globale Système",
+    description: "Inspecte l'espace disque, la RAM libre et la durée de fonctionnement.",
+    command: "df -h && free -m && uptime",
+    category: "Diagnostic",
+  },
+  {
+    id: "custom_2",
+    title: "Nettoyage du cache DNS",
+    description: "Vide et réinitialise le cache de résolution de noms système.",
+    command: "resolvectl flush-caches 2>/dev/null || systemctl restart systemd-resolved 2>/dev/null || echo 'DNS Cache Flushed'",
+    category: "Réseau",
+  },
+];
 
 interface ServiceAction {
   name: string;
@@ -56,7 +75,13 @@ export const MaintenanceHub: React.FC<MaintenanceHubProps> = ({
   );
 
   // Custom persistent macros
-  const [customMacros, setCustomMacros] = useState<CustomMacro[]>([]);
+  // Macros = commandes shell exécutables (peuvent contenir des secrets)
+  // → stockage sécurisé (keyring OS en Tauri, localStorage clair en web)
+  const { value: customMacros, setValue: setCustomMacros } = useSecureStorage<CustomMacro[]>(
+    "terminal_maintenance_macros",
+    DEFAULT_MACROS
+  );
+  const safeMacros = customMacros ?? DEFAULT_MACROS;
   const [customTitle, setCustomTitle] = useState("");
   const [customCommand, setCustomCommand] = useState("");
   const [customDescription, setCustomDescription] = useState("");
@@ -73,41 +98,12 @@ export const MaintenanceHub: React.FC<MaintenanceHubProps> = ({
   const [historyFeed, setHistoryFeed] = useState<{ id: string; command: string; timestamp: string; label: string }[]>([]);
   const [lastExecutedTask, setLastExecutedTask] = useState<string | null>(null);
 
-  // Load custom macros from localStorage on init
-  useEffect(() => {
-    const saved = localStorage.getItem("terminal_maintenance_macros");
-    if (saved) {
-      try {
-        setCustomMacros(JSON.parse(saved));
-      } catch (e) {
-        console.error("Error loading maintenance macros", e);
-      }
-    } else {
-      const defaultMacros: CustomMacro[] = [
-        {
-          id: "custom_1",
-          title: "Intégrité Globale Système",
-          description: "Inspecte l'espace disque, la RAM libre et la durée de fonctionnement.",
-          command: "df -h && free -m && uptime",
-          category: "Diagnostic",
-        },
-        {
-          id: "custom_2",
-          title: "Nettoyage du cache DNS",
-          description: "Vide et réinitialise le cache de résolution de noms système.",
-          command: "resolvectl flush-caches 2>/dev/null || systemctl restart systemd-resolved 2>/dev/null || echo 'DNS Cache Flushed'",
-          category: "Réseau",
-        },
-      ];
-      setCustomMacros(defaultMacros);
-      localStorage.setItem("terminal_maintenance_macros", JSON.stringify(defaultMacros));
-    }
-  }, []);
+  // (Chargement des macros géré par useSecureStorage avec migration auto
+  //  depuis l'ancien localStorage clair.)
 
-  // Save custom macros to localStorage helper
+  // Save custom macros (useSecureStorage persiste automatiquement)
   const saveMacros = (newMacros: CustomMacro[]) => {
     setCustomMacros(newMacros);
-    localStorage.setItem("terminal_maintenance_macros", JSON.stringify(newMacros));
   };
 
   const handleRunTask = (command: string, taskId: string, label: string) => {
@@ -137,7 +133,7 @@ export const MaintenanceHub: React.FC<MaintenanceHubProps> = ({
       category: customCategory.trim() || "Général",
     };
 
-    const updated = [...customMacros, newMacro];
+    const updated = [...safeMacros, newMacro];
     saveMacros(updated);
 
     setCustomTitle("");
@@ -147,7 +143,7 @@ export const MaintenanceHub: React.FC<MaintenanceHubProps> = ({
   };
 
   const handleDeleteMacro = (id: string) => {
-    const filtered = customMacros.filter((m) => m.id !== id);
+    const filtered = safeMacros.filter((m) => m.id !== id);
     saveMacros(filtered);
   };
 
@@ -441,13 +437,13 @@ export const MaintenanceHub: React.FC<MaintenanceHubProps> = ({
               <Sparkles className="w-5 h-5 text-emerald-400" />
               <div>
                 <h4 className="font-bold text-xs text-slate-100 uppercase tracking-wider">Raccourcis Enregistrés</h4>
-                <p className="text-[9px] text-slate-500">Vos raccourcis personnalisés persistants ({customMacros.length})</p>
+                <p className="text-[9px] text-slate-500">Vos raccourcis personnalisés persistants ({safeMacros.length})</p>
               </div>
             </div>
 
             {/* List */}
             <div className="space-y-2 max-h-[160px] overflow-y-auto custom-scrollbar">
-              {customMacros.map((macro) => (
+              {safeMacros.map((macro) => (
                 <div key={macro.id} className="p-2 bg-slate-950 rounded border border-slate-850 flex items-center justify-between text-xs group">
                   <div className="min-w-0 pr-2">
                     <span className="font-semibold text-slate-300 block truncate leading-tight">{macro.title}</span>
@@ -472,7 +468,7 @@ export const MaintenanceHub: React.FC<MaintenanceHubProps> = ({
                 </div>
               ))}
 
-              {customMacros.length === 0 && (
+              {safeMacros.length === 0 && (
                 <div className="text-center p-3 text-slate-600 text-[10px]">Aucun raccourci enregistré.</div>
               )}
             </div>

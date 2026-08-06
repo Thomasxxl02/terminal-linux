@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { COMMAND_SNIPPETS } from "../constants/snippets";
 import { CommandSnippet } from "../types";
+import { useSecureStorage } from "../hooks/useSecureStorage";
 
 interface SnippetsLibraryProps {
   onExecuteInTerminal: (command: string) => void;
@@ -31,6 +32,12 @@ export const SnippetsLibrary: React.FC<SnippetsLibraryProps> = ({
   const [copiedId, setCopiedId] = useState<string | null>(null);
   
   // Custom interactive snippets list with storage
+  // Snippets = commandes shell exécutables (peuvent contenir des secrets)
+  // → stockage sécurisé (keyring OS en Tauri, localStorage clair en web)
+  const { value: customSnippets, setValue: setCustomSnippets } = useSecureStorage<CommandSnippet[]>(
+    "terminal_custom_snippets",
+    []
+  );
   const [snippets, setSnippets] = useState<CommandSnippet[]>([]);
   
   // Composer Workspace (Pipeline Composer)
@@ -43,25 +50,16 @@ export const SnippetsLibrary: React.FC<SnippetsLibraryProps> = ({
   const [newCmd, setNewCmd] = useState("");
   const [newCat, setNewCat] = useState("Perso");
 
-  // Load merged list on init
+  // Load merged list on init (une fois le stockage sécurisé chargé)
   useEffect(() => {
-    const saved = localStorage.getItem("terminal_custom_snippets");
-    let parsedCustom: CommandSnippet[] = [];
-    if (saved) {
-      try {
-        parsedCustom = JSON.parse(saved);
-      } catch (e) {
-        console.error("Error loading custom snippets", e);
-      }
-    }
-    setSnippets([...COMMAND_SNIPPETS, ...parsedCustom]);
-  }, []);
+    setSnippets([...COMMAND_SNIPPETS, ...(customSnippets ?? [])]);
+  }, [customSnippets]);
 
   const saveCustomSnippets = (allSnippets: CommandSnippet[]) => {
-    // Save only custom snippets to localStorage
+    // Save only custom snippets to secure storage
     const defaultIds = COMMAND_SNIPPETS.map(s => s.id);
     const customsOnly = allSnippets.filter(s => !defaultIds.includes(s.id));
-    localStorage.setItem("terminal_custom_snippets", JSON.stringify(customsOnly));
+    setCustomSnippets(customsOnly);
     setSnippets(allSnippets);
   };
 

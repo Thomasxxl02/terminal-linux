@@ -21,7 +21,20 @@ export function useSecureStorage<T>(
     let cancelled = false;
     (async () => {
       try {
-        const raw = await secureGet(key);
+        let raw = await secureGet(key);
+        if (raw == null) {
+          // Migration : si une valeur existait en localStorage (ancien
+          // stockage clair), on la transfère vers le keyring puis on
+          // l'efface. Évite de perdre les données pré-keyring.
+          const legacy = localStorage.getItem(key);
+          if (legacy != null) {
+            raw = legacy;
+            secureSet(key, legacy).catch((e) =>
+              console.warn(`[useSecureStorage] Erreur migration "${key}" :`, e)
+            );
+            localStorage.removeItem(key);
+          }
+        }
         if (cancelled) return;
         if (raw != null) {
           setValueState(JSON.parse(raw) as T);

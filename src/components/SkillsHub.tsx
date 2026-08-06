@@ -25,6 +25,7 @@ import {
   CheckCircle2,
   Clock
 } from "lucide-react";
+import { useSecureStorage } from "../hooks/useSecureStorage";
 
 interface SkillParameter {
   name: string;
@@ -102,6 +103,12 @@ const PREDEFINED_SKILLS: CustomSkill[] = [
 ];
 
 export const SkillsHub: React.FC<SkillsHubProps> = ({ onExecuteInTerminal }) => {
+  // Skills personnalisés = scripts exécutables (peuvent contenir des secrets)
+  // → stockage sécurisé (keyring OS en Tauri, localStorage clair en web)
+  const { value: customSkills, setValue: setCustomSkills } = useSecureStorage<CustomSkill[]>(
+    "terminal_custom_skills",
+    []
+  );
   const [skills, setSkills] = useState<CustomSkill[]>([]);
   const [activeSkillId, setActiveSkillId] = useState<string>("net-scan");
   const [paramValues, setParamValues] = useState<Record<string, string>>({});
@@ -132,19 +139,10 @@ export const SkillsHub: React.FC<SkillsHubProps> = ({ onExecuteInTerminal }) => 
   const [totalExecutions, setTotalExecutions] = useState(0);
   const [recentRuns, setRecentRuns] = useState<{ id: string; name: string; timestamp: string; script: string }[]>([]);
 
-  // Load predefined and localStorage custom skills
+  // Load predefined and custom skills (depuis le stockage sécurisé)
   useEffect(() => {
-    const saved = localStorage.getItem("terminal_custom_skills");
-    let customList: CustomSkill[] = [];
-    if (saved) {
-      try {
-        customList = JSON.parse(saved);
-      } catch (e) {
-        console.error("Error loading custom skills", e);
-      }
-    }
-    setSkills([...PREDEFINED_SKILLS, ...customList]);
-  }, []);
+    setSkills([...PREDEFINED_SKILLS, ...(customSkills ?? [])]);
+  }, [customSkills]);
 
   const activeSkill = skills.find((s) => s.id === activeSkillId) || skills[0] || PREDEFINED_SKILLS[0];
 
@@ -244,18 +242,9 @@ export const SkillsHub: React.FC<SkillsHubProps> = ({ onExecuteInTerminal }) => 
       isCustom: true
     };
 
-    const saved = localStorage.getItem("terminal_custom_skills");
-    let currentCustoms: CustomSkill[] = [];
-    if (saved) {
-      try {
-        currentCustoms = JSON.parse(saved);
-      } catch (e) {
-        console.warn("[SkillsHub] JSON localStorage invalide, réinitialisation", e);
-      }
-    }
-
+    const currentCustoms = customSkills ?? [];
     const updatedCustoms = [...currentCustoms, newSkill];
-    localStorage.setItem("terminal_custom_skills", JSON.stringify(updatedCustoms));
+    setCustomSkills(updatedCustoms);
 
     setSkills([...PREDEFINED_SKILLS, ...updatedCustoms]);
     setActiveSkillId(generatedId);
@@ -271,25 +260,18 @@ export const SkillsHub: React.FC<SkillsHubProps> = ({ onExecuteInTerminal }) => 
 
   const handleDeleteCustomSkill = (id: string, e: React.MouseEvent | React.KeyboardEvent) => {
     e.stopPropagation();
-    const saved = localStorage.getItem("terminal_custom_skills");
-    if (saved) {
-      try {
-        const currentCustoms: CustomSkill[] = JSON.parse(saved);
-        const filtered = currentCustoms.filter((s) => s.id !== id);
-        localStorage.setItem("terminal_custom_skills", JSON.stringify(filtered));
-        setSkills([...PREDEFINED_SKILLS, ...filtered]);
-        if (activeSkillId === id) {
-          setActiveSkillId("net-scan");
-        }
-      } catch (err) {
-        console.warn("[SkillsHub] Suppression impossible (JSON invalide)", err);
-      }
+    const currentCustoms = customSkills ?? [];
+    const filtered = currentCustoms.filter((s) => s.id !== id);
+    setCustomSkills(filtered);
+    setSkills([...PREDEFINED_SKILLS, ...filtered]);
+    if (activeSkillId === id) {
+      setActiveSkillId("net-scan");
     }
   };
 
   // --- Export / Import Config center handlers ---
   const handleOpenExport = () => {
-    const saved = localStorage.getItem("terminal_custom_skills") || "[]";
+    const saved = JSON.stringify(customSkills ?? []);
     setShareJsonString(saved);
     setShowShareModal(true);
     setImportFeedback("");
@@ -326,7 +308,7 @@ export const SkillsHub: React.FC<SkillsHubProps> = ({ onExecuteInTerminal }) => 
         };
       });
 
-      localStorage.setItem("terminal_custom_skills", JSON.stringify(checked));
+      setCustomSkills(checked);
       setSkills([...PREDEFINED_SKILLS, ...checked]);
       setImportFeedback("✓ Importation réussie !");
       setTimeout(() => setShowShareModal(false), 1500);

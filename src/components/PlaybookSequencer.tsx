@@ -25,6 +25,7 @@ import {
 } from "lucide-react";
 import { Playbook, PlaybookStep, TerminalSessionInfo } from "../types";
 import { useLocalStorage } from "../hooks/useLocalStorage";
+import { useSecureStorage } from "../hooks/useSecureStorage";
 import { PlaybookFormModal } from "./PlaybookFormModal";
 
 const PRESET_PLAYBOOKS: Playbook[] = [
@@ -171,11 +172,14 @@ export const PlaybookSequencer: React.FC<PlaybookSequencerProps> = ({
   onExecuteCommandInTerminal,
   onOpenTerminalView,
 }) => {
-  const [playbooks, setPlaybooks] = useLocalStorage<Playbook[]>(
+  // Playbooks = commandes shell exécutables (peuvent contenir des secrets)
+  // → stockage sécurisé (keyring OS en Tauri, localStorage clair en web)
+  const { value: playbooks, setValue: setPlaybooks } = useSecureStorage<Playbook[]>(
     STORAGE_KEY_PLAYBOOKS,
     PRESET_PLAYBOOKS
   );
-  const [selectedPlaybook, setSelectedPlaybook] = useState<Playbook | null>(() => playbooks[0] || null);
+  const safePlaybooks = playbooks ?? PRESET_PLAYBOOKS;
+  const [selectedPlaybook, setSelectedPlaybook] = useState<Playbook | null>(null);
   const [selectedSessionId, setSelectedSessionId] = useState<string>("");
 
   // History tracking local persistence
@@ -201,11 +205,12 @@ export const PlaybookSequencer: React.FC<PlaybookSequencerProps> = ({
   // Notifications
   const [bannerMsg, setBannerMsg] = useState<string | null>(null);
 
+  // Sélection par défaut : premier playbook une fois chargé
   useEffect(() => {
-    if (!selectedPlaybook && playbooks.length > 0) {
-      setSelectedPlaybook(playbooks[0]);
+    if (!selectedPlaybook && safePlaybooks.length > 0) {
+      setSelectedPlaybook(safePlaybooks[0]);
     }
-  }, [playbooks, selectedPlaybook]);
+  }, [safePlaybooks, selectedPlaybook]);
 
   useEffect(() => {
     if (activeSessionId) {
@@ -216,12 +221,8 @@ export const PlaybookSequencer: React.FC<PlaybookSequencerProps> = ({
   }, [activeSessionId, sessions]);
 
   const savePlaybooks = (updated: Playbook[]) => {
+    // useSecureStorage persiste automatiquement (keyring OS en Tauri)
     setPlaybooks(updated);
-    try {
-      localStorage.setItem(STORAGE_KEY_PLAYBOOKS, JSON.stringify(updated));
-    } catch {
-      // Stockage indisponible (mode privé) — les playbooks restent en mémoire
-    }
   };
 
   const showNotification = (msg: string) => {
@@ -354,7 +355,7 @@ export const PlaybookSequencer: React.FC<PlaybookSequencerProps> = ({
         const importedPb = JSON.parse(event.target?.result as string) as Playbook;
         if (importedPb.name && Array.isArray(importedPb.steps)) {
           importedPb.id = `pb_imported_${Date.now()}`;
-          const updated = [importedPb, ...playbooks];
+          const updated = [importedPb, ...safePlaybooks];
           savePlaybooks(updated);
           setSelectedPlaybook(importedPb);
           showNotification(`Playbook "${importedPb.name}" importé !`);
@@ -383,7 +384,7 @@ export const PlaybookSequencer: React.FC<PlaybookSequencerProps> = ({
     if (!data.name.trim() || data.steps.length === 0) return;
 
     if (editingPlaybook) {
-      const updated = playbooks.map((p) =>
+      const updated = safePlaybooks.map((p) =>
         p.id === editingPlaybook.id
           ? {
               ...p,
@@ -406,7 +407,7 @@ export const PlaybookSequencer: React.FC<PlaybookSequencerProps> = ({
         steps: data.steps,
         createdAt: Date.now(),
       };
-      savePlaybooks([newPb, ...playbooks]);
+      savePlaybooks([newPb, ...safePlaybooks]);
       setSelectedPlaybook(newPb);
       showNotification("Nouveau Playbook d'automation créé !");
     }
@@ -415,7 +416,7 @@ export const PlaybookSequencer: React.FC<PlaybookSequencerProps> = ({
   };
 
   const handleDeletePlaybook = (id: string) => {
-    const updated = playbooks.filter((p) => p.id !== id);
+    const updated = safePlaybooks.filter((p) => p.id !== id);
     savePlaybooks(updated);
     if (selectedPlaybook?.id === id) {
       setSelectedPlaybook(updated[0] || null);
@@ -459,7 +460,7 @@ export const PlaybookSequencer: React.FC<PlaybookSequencerProps> = ({
             <h2 className="text-base font-semibold text-slate-100 flex items-center gap-2">
               Séquenceur de Playbooks & Automation
               <span className="text-xs font-mono px-2 py-0.5 rounded-full bg-slate-800 text-teal-400 border border-slate-700">
-                {playbooks.length} Pipelines
+                {safePlaybooks.length} Pipelines
               </span>
             </h2>
             <p className="text-xs text-slate-400">
@@ -503,7 +504,7 @@ export const PlaybookSequencer: React.FC<PlaybookSequencerProps> = ({
           </h3>
 
           <div className="flex-1 overflow-y-auto space-y-2 pr-1 custom-scrollbar">
-            {playbooks.map((pb) => {
+            {safePlaybooks.map((pb) => {
               const isSelected = selectedPlaybook?.id === pb.id;
               return (
                 <div
