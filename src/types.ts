@@ -205,6 +205,8 @@ export interface TauriSourceCode {
   cargoToml: string;
   mainRs: string;
   ptyRs: string;
+  commandsRs: string;
+  secretsRs: string;
   tauriConfJson: string;
 }
 

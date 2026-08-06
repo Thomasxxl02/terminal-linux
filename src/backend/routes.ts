@@ -647,11 +647,29 @@ router.get("/db/sync-report", async (req, res) => {
 
 // 7. Tauri Architecture Provider
 router.get("/tauri/source", (req, res) => {
+  // Lit les VRAIS fichiers source Rust du projet (pas de placeholders)
+  const srcDir = path.join(process.cwd(), "src-tauri", "src");
+  const readRs = (f: string) => {
+    try {
+      return fs.readFileSync(path.join(srcDir, f), "utf-8");
+    } catch {
+      return "";
+    }
+  };
+  const readConf = (f: string) => {
+    try {
+      return fs.readFileSync(path.join(process.cwd(), "src-tauri", f), "utf-8");
+    } catch {
+      return "";
+    }
+  };
   res.json({
-    cargoToml: "[package]\nname=\"tauri-linux-terminal\"",
-    mainRs: "fn main() { println!(\"Hello from Tauri!\"); }",
-    ptyRs: "// pty manager placeholder",
-    tauriConfJson: "{}",
+    cargoToml: readConf("Cargo.toml"),
+    mainRs: readRs("main.rs"),
+    ptyRs: readRs("pty.rs"),
+    commandsRs: readRs("commands.rs"),
+    secretsRs: readRs("secrets.rs"),
+    tauriConfJson: readConf("tauri.conf.json"),
   });
 });
 

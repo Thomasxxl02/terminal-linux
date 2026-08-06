@@ -23,7 +23,8 @@ fn main() {
             get_system_stats,
             secure_set,
             secure_get,
-            secure_delete
+            secure_delete,
+            get_source_code
         ])
         .run(tauri::generate_context!())
         .expect("Erreur lors du démarrage de l'application Tauri & Rust Terminal");

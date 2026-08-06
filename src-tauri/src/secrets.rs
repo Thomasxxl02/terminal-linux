@@ -1,5 +1,6 @@
 use keyring::Entry;
 use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
 
 /// Service name utilisé dans le keyring OS (GNOME Keyring / Keychain / Credential Manager)
 const KEYRING_SERVICE: &str = "com.tauri.linuxterminal";
@@ -43,4 +44,23 @@ pub async fn secure_delete(key: String) -> Result<(), String> {
         Err(keyring::Error::NoEntry) => Ok(()),
         Err(e) => Err(format!("Erreur keyring (suppression) : {}", e)),
     }
+}
+
+/// Lit les VRAIS fichiers source Rust du backend (affichage dans le panneau
+/// "Architecture Rust"). Retourne le contenu brut, vide si le fichier manque.
+#[tauri::command]
+pub fn get_source_code() -> Result<serde_json::Value, String> {
+    let src_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src");
+    let read = |f: &str| std::fs::read_to_string(src_dir.join(f)).unwrap_or_default();
+    let conf_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let read_conf = |f: &str| std::fs::read_to_string(conf_dir.join(f)).unwrap_or_default();
+
+    Ok(serde_json::json!({
+        "cargoToml": read_conf("Cargo.toml"),
+        "mainRs": read("main.rs"),
+        "ptyRs": read("pty.rs"),
+        "commandsRs": read("commands.rs"),
+        "secretsRs": read("secrets.rs"),
+        "tauriConfJson": read_conf("tauri.conf.json"),
+    }))
 }

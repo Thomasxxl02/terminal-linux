@@ -3,31 +3,19 @@ import { render, screen, fireEvent, waitFor, act } from "@testing-library/react"
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { TauriRustArchitect } from "../components/TauriRustArchitect";
 
-// Mock `@monaco-editor/react` to prevent async/WebGL issues in jsdom environment
-vi.mock("@monaco-editor/react", () => {
-  return {
-    default: ({ value, language }: any) => (
-      <textarea
-        data-testid="monaco-editor-mock"
-        value={value}
-        readOnly
-        data-language={language}
-      />
-    ),
-  };
-});
-
 describe("TauriRustArchitect Component", () => {
   const mockSourceData = {
-    cargoToml: "[package]\nname = \"tauri-test\"",
-    mainRs: "fn main() { println!(\"hello main\"); }",
+    cargoToml: "[package]\nname = \"tauri-linux-terminal\"",
+    mainRs: "fn main() { println!(\"Hello from Tauri!\"); }",
     ptyRs: "pub struct PtySession {}",
+    commandsRs: "pub async fn create_pty_session() {}",
+    secretsRs: "pub async fn secure_set() {}",
     tauriConfJson: "{ \"tauri\": {} }",
   };
 
   beforeEach(() => {
     vi.clearAllMocks();
-    
+
     // Mock global fetch
     global.fetch = vi.fn().mockImplementation((url: string) => {
       if (url.includes("/api/tauri/source")) {
@@ -43,82 +31,44 @@ describe("TauriRustArchitect Component", () => {
     });
   });
 
-  it("renders the architecture page successfully with title and tabs", async () => {
+  it("renders the Rust architecture page with title", async () => {
     await act(async () => {
       render(<TauriRustArchitect />);
     });
 
-    expect(screen.getByText(/Analyse Comparative d'Architectures de Terminaux/i)).toBeInTheDocument();
-    expect(screen.getAllByText("Tauri + Rust (portable-pty)")[0]).toBeInTheDocument();
-    expect(screen.getAllByText("Electron + node-pty")[0]).toBeInTheDocument();
-    expect(screen.getAllByText("Web Terminal + Passerelle WebSocket")[0]).toBeInTheDocument();
-    expect(screen.getAllByText("Native GPU Terminal (Alacritty Style)")[0]).toBeInTheDocument();
+    expect(screen.getByText(/Architecture Rust du backend Tauri/i)).toBeInTheDocument();
   });
 
-  it("displays Tauri + Rust characteristics by default", async () => {
+  it("lists the real registered Tauri commands", async () => {
     await act(async () => {
       render(<TauriRustArchitect />);
     });
 
-    // Default active profile should be Tauri
-    expect(screen.getAllByText("Tauri + Rust (portable-pty)")[0]).toBeInTheDocument();
-    expect(screen.getByText("< 30 Mo")).toBeInTheDocument();
-    expect(screen.getByText("4 Mo - 8 Mo")).toBeInTheDocument();
-    expect(screen.getByText(/Tauri Event Bridge & WebGL/i)).toBeInTheDocument();
+    expect(screen.getByText("create_pty_session")).toBeInTheDocument();
+    expect(screen.getByText("write_pty_input")).toBeInTheDocument();
+    expect(screen.getByText("close_pty_session")).toBeInTheDocument();
+    expect(screen.getByText("secure_set")).toBeInTheDocument();
+    expect(screen.getByText("get_system_stats")).toBeInTheDocument();
+    // Aucune mention d'Electron (vestige supprimé)
+    expect(screen.queryByText(/Electron/i)).not.toBeInTheDocument();
   });
 
-  it("switches to Electron + node-pty architecture and updates metrics", async () => {
+  it("loads real Rust source files into the code viewer", async () => {
     await act(async () => {
       render(<TauriRustArchitect />);
     });
 
-    const electronTab = screen.getAllByText("Electron + node-pty")[0];
-    await act(async () => {
-      fireEvent.click(electronTab);
-    });
-
-    // Should display electron metrics
-    expect(screen.getByText("150 Mo - 350 Mo")).toBeInTheDocument();
-    expect(screen.getByText("80 Mo - 130 Mo")).toBeInTheDocument();
-    expect(screen.getAllByText(/VSCode \/ Hyper/i)[0]).toBeInTheDocument();
-    expect(screen.getByText(/pont de preload sécurisé/i)).toBeInTheDocument();
-  });
-
-  it("switches to Web Terminal architecture and displays websocket pipeline", async () => {
-    await act(async () => {
-      render(<TauriRustArchitect />);
-    });
-
-    const webTab = screen.getAllByText("Web Terminal + Passerelle WebSocket")[0];
-    await act(async () => {
-      fireEvent.click(webTab);
-    });
-
-    expect(screen.getByText("< 15 Mo (Côté Client)")).toBeInTheDocument();
-    expect(screen.getByText("1 Mo - 2 Mo (Code Client)")).toBeInTheDocument();
-    expect(screen.getByText(/Converties en trame binaire/i)).toBeInTheDocument();
-  });
-
-  it("loads source file content into Monaco mock when switching file tabs", async () => {
-    await act(async () => {
-      render(<TauriRustArchitect />);
-    });
-
-    // Wait for mock fetch to resolve
     await waitFor(() => {
       expect(global.fetch).toHaveBeenCalled();
     });
 
-    const ptyFileTab = screen.getByText("src-tauri/src/pty.rs");
-    expect(ptyFileTab).toBeInTheDocument();
-
-    const mainFileTab = screen.getByText("src-tauri/src/main.rs");
+    // Le contenu réel de pty.rs est affiché quand on clique sur son onglet
+    const ptyTab = screen.getByText("pty.rs");
     await act(async () => {
-      fireEvent.click(mainFileTab);
+      fireEvent.click(ptyTab);
     });
 
-    const editorMock = screen.getByTestId("monaco-editor-mock");
-    expect(editorMock).toHaveValue("fn main() { println!(\"hello main\"); }");
+    expect(screen.getByText("pub struct PtySession {}")).toBeInTheDocument();
   });
 
   it("handles copy button click", async () => {
@@ -134,12 +84,12 @@ describe("TauriRustArchitect Component", () => {
       render(<TauriRustArchitect />);
     });
 
-    const copyBtn = screen.getByText(/Copier ce fichier de code/i);
+    const copyBtn = screen.getByRole("button", { name: /Copier/i });
     await act(async () => {
       fireEvent.click(copyBtn);
     });
 
     expect(writeTextMock).toHaveBeenCalled();
-    expect(screen.getByText(/Code Copié !/i)).toBeInTheDocument();
+    expect(screen.getByText(/Copié !/i)).toBeInTheDocument();
   });
 });
