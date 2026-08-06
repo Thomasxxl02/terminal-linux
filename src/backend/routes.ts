@@ -518,7 +518,9 @@ const mockRemoteFs: Record<string, { content: string; isDirectory: boolean; size
 };
 
 router.get("/fs/remote/tree", (req, res) => {
-  const targetDir = validateOptionalString(req.query.path, "path") || "/home/developer";
+  const rawPath = req.query.path;
+  // Garde explicite : un paramètre répété (?path=a&path=b) arrive en tableau
+  const targetDir = typeof rawPath === "string" && rawPath !== "" ? rawPath : "/home/developer";
   const normDir = targetDir.endsWith("/") ? targetDir : targetDir + "/";
   const uniqueItems = new Map<string, any>();
 
@@ -554,7 +556,9 @@ router.get("/fs/remote/tree", (req, res) => {
 });
 
 router.get("/fs/remote/read", (req, res) => {
-  const filePath = validateOptionalString(req.query.path, "path");
+  const rawPath = req.query.path;
+  // Garde explicite : rejette les tableaux (paramètre répété) et les non-string
+  const filePath = typeof rawPath === "string" ? rawPath : undefined;
   if (!filePath) return res.status(400).json({ error: "Chemin requis" });
   const item = mockRemoteFs[filePath];
   if (!item || item.isDirectory) {
@@ -570,9 +574,12 @@ router.get("/fs/remote/read", (req, res) => {
 });
 
 router.post("/fs/remote/write", (req, res) => {
-  const filePath = validateOptionalString(req.body?.path, "path");
+  const rawPath = req.body?.path;
+  const rawContent = req.body?.content;
+  // Gardes explicites : rejettent tableaux et non-string
+  const filePath = typeof rawPath === "string" && rawPath !== "" ? rawPath : undefined;
   if (!filePath) return res.status(400).json({ error: "Chemin requis" });
-  const content = validateOptionalString(req.body?.content, "content") || "";
+  const content = typeof rawContent === "string" ? rawContent : "";
 
   mockRemoteFs[filePath] = {
     content,
