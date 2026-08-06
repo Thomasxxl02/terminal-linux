@@ -1,20 +1,70 @@
 <div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://ai.google.dev/static/site-assets/images/share-ais-513315318.png" />
+
+# 🖥️ Terminal Linux Emulator
+
+Émulateur de terminal Linux haute performance, fonctionnant dans le navigateur.
+
 </div>
 
-# Run and deploy your AI Studio app
+## ✨ Fonctionnalités
 
-This contains everything you need to run your app locally.
+- **Terminal xterm.js** avec rendu WebGL, recherche et liens cliquables
+- **Onglets multiples** avec profils shell (bash/zsh)
+- **Éditeur de fichiers Monaco** intégré (lecture/écriture via API)
+- **Gestion SSH** : hôtes, tunnels dynamiques et directs
+- **Snippets** et **playbooks** réutilisables
+- **Séquencier de maintenance** système (apt, docker, logs)
+- **Surveillance système** : CPU, RAM, processus
+- **Assistant IA** (Gemini) intégré
+- **Mode desktop optionnel** via Tauri (Rust + portable-pty)
 
-View your app in AI Studio: https://ai.studio/apps/bec048f3-16f0-40a5-a679-92141d8df40f
+## 🚀 Démarrage local
 
-## Run Locally
+**Prérequis :** Node.js 22+
 
-**Prerequisites:**  Node.js
+```bash
+npm install
+npm run dev
+```
 
+Le serveur démarre sur `http://localhost:3000` (backend Express + WebSocket, middleware Vite en dev).
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+> Note : le mode desktop (`src-tauri/`) nécessite Rust et les dépendances système Tauri. L'application web est entièrement autonome sans cette couche.
+
+## 🧪 Tests
+
+```bash
+npm run lint        # tsc --noEmit
+npm run test        # tests unitaires Vitest
+npm run test:e2e    # tests Playwright
+cd src-tauri && cargo test   # tests Rust (PTY bridge)
+```
+
+## ⚙️ Configuration
+
+Copiez `.env.example` vers `.env.local` et renseignez :
+
+| Variable | Requise | Description |
+|---|---|---|
+| `GEMINI_API_KEY` | Pour l'IA | Clé API Google Gemini |
+| `APP_URL` | Déploiement | URL publique de l'app |
+
+## 🏗️ Architecture
+
+```
+server.ts                  → Express + WebSocket + Vite middleware
+src/backend/routes.ts      → API REST (/api/pty, /api/fs, /api/db, /api/system)
+src/backend/sync.ts        → WebSocket (streaming PTY)
+src/backend/services.ts    → PtyService, MaintenanceService, PermissionService
+src/backend/db.ts          → PostgreSQL (hôtes SSH, snippets, playbooks)
+src/backend/security.ts    → Validation d'entrées, anti path traversal
+src-tauri/                 → Couche desktop optionnelle (Rust + portable-pty)
+```
+
+## 🛡️ Sécurité
+
+Voir [SECURITY.md](SECURITY.md) pour les mesures en place et les limitations connues.
+
+## 📝 Licence
+
+Privé — usage interne.

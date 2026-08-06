@@ -3,7 +3,7 @@ use std::io::{Read, Write};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Manager, Wry};
+use tauri::{AppHandle, Emitter, Wry};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct PtyPipedData {
@@ -17,6 +17,7 @@ pub struct PtyPipedData {
 pub struct PtySession {
     pub pair: PtyPair,
     pub writer: Box<dyn Write + Send>,
+    pub child: Option<Box<dyn portable_pty::Child + Send + Sync>>,
 }
 
 impl PtySession {
@@ -44,7 +45,7 @@ impl PtySession {
         cmd.env("TERM", "xterm-256color");
         cmd.env("COLORTERM", "truecolor");
 
-        let _child = pair
+        let child = pair
             .slave
             .spawn_command(cmd)
             .map_err(|e| format!("Impossible de démarrer le sous-processus shell {}: {}", shell, e))?;
@@ -57,6 +58,7 @@ impl PtySession {
         Ok(Self {
             pair,
             writer,
+            child: Some(child),
         })
     }
 
@@ -67,9 +69,9 @@ impl PtySession {
         self.writer.flush().map_err(|e| format!("Erreur flush PTY: {}", e))?;
         Ok(())
     }
-
     pub fn resize(&self, cols: u16, rows: u16) -> Result<(), String> {
-        self.pair.master
+        self.pair
+            .master
             .resize(PtySize {
                 rows,
                 cols,
@@ -77,6 +79,16 @@ impl PtySession {
                 pixel_height: 0,
             })
             .map_err(|e| format!("Erreur redimensionnement PTY: {}", e))?;
+        Ok(())
+    }
+
+    /// Kills the underlying shell process if still alive (SIGKILL via portable-pty).
+    pub fn kill(&mut self) -> Result<(), String> {
+        if let Some(child) = self.child.as_mut() {
+            child
+                .kill()
+                .map_err(|e| format!("Erreur kill du processus shell: {}", e))?;
+        }
         Ok(())
     }
 }
@@ -99,17 +111,28 @@ impl PtyManager {
 
         // Thread asynchrone non-bloquant pour écouter la sortie PTY et émettre l'événement Tauri IPC
         thread::spawn(move || {
-            let mut buf = [0u8; 4096];
+            let mut buf = [0u8; 16384];
+            let mut pending: Vec<u8> = Vec::new();
             loop {
                 match reader.read(&mut buf) {
                     Ok(0) => break, // EOF process
                     Ok(n) => {
-                        let data_str = String::from_utf8_lossy(&buf[..n]).to_string();
-                        let payload = PtyPipedData {
-                            session_id: sid_clone.clone(),
-                            data: data_str,
+                        pending.extend_from_slice(&buf[..n]);
+                        // Découper uniquement sur une frontière UTF-8 valide
+                        let valid_len = match std::str::from_utf8(&pending) {
+                            Ok(_) => pending.len(),
+                            Err(e) => e.valid_up_to(),
                         };
-                        let _ = handle_clone.emit_all("pty-output", payload);
+                        if valid_len > 0 {
+                            let data_str =
+                                String::from_utf8_lossy(&pending[..valid_len]).to_string();
+                            let payload = PtyPipedData {
+                                session_id: sid_clone.clone(),
+                                data: data_str,
+                            };
+                            let _ = handle_clone.emit("pty-output", payload);
+                            pending.drain(..valid_len);
+                        }
                     }
                     Err(_) => break,
                 }
@@ -130,6 +153,11 @@ impl PtyManager {
         let session = self.session.lock().map_err(|e| e.to_string())?;
         session.resize(cols, rows)
     }
+
+    pub fn kill(&self) -> Result<(), String> {
+        let mut session = self.session.lock().map_err(|e| e.to_string())?;
+        session.kill()
+    }
 }
 
 // ==================== Rust Backend Unit Tests ====================
@@ -148,6 +176,16 @@ mod tests {
         // Verify we can resize the master terminal grid dynamically
         let resize_res = session.resize(120, 40);
         assert!(resize_res.is_ok(), "Le redimensionnement de la grille PTY à 120x40 devrait réussir");
+    }
+
+    #[test]
+    fn test_pty_kill_terminates_shell() {
+        let mut session = PtySession::new(80, 24, None).expect("Impossible d'initialiser PtySession pour test kill");
+        // Le shell doit être vivant après création
+        assert!(session.child.is_some(), "Le child shell devrait exister après spawn");
+        // Kill doit réussir sans erreur
+        let kill_res = session.kill();
+        assert!(kill_res.is_ok(), "Le kill du shell devrait réussir: {:?}", kill_res.err());
     }
 
     #[test]

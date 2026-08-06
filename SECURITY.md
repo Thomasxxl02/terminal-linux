@@ -1,52 +1,75 @@
 # Politique de Sécurité (SECURITY.md)
 
-Cette politique de sécurité s'applique à l'application desktop de gestion d'entreprise et de facturation électronique (Tauri + React + SQLite). Elle décrit les mesures de sécurité intégrées au système, les versions prises en charge, ainsi que la procédure pour signaler de manière responsable toute vulnérabilité détectée.
+Cette politique s'applique à **terminal-linux**, un émulateur de terminal Linux web (React + TypeScript) avec backend Node.js/Express, WebSocket, gestion PTY, et une couche desktop optionnelle Rust/Tauri.
 
 ---
 
-## 🛡️ Mesures de Sécurité Intégrées
+## 🛡️ Mesures de sécurité réellement en place
 
-L'application a été conçue en respectant les principes fondamentaux de sécurité applicative (OWASP, DevSkim, CodeQL) afin de protéger les données comptables et d'entreprise hautement sensibles :
+Les protections suivantes sont implémentées dans le code source (vérifiables dans `src/backend/` et `server.ts`) :
 
-### 1. Protection contre la Divulgation d'Informations Sensibles
-* **Obfuscation du Stockage Local (`localStorage`) :** Les clés contenant des informations sensibles (telles que `terminal_ssh_hosts`, `tauri_linux_shell_profiles` et `tauri_linux_saved_tabs`) sont chiffrées/obfusquées de manière réversible à l'aide d'un masque XOR et d'un encodage Base64 sécurisé avant d'être écrites sur le disque local, empêchant ainsi leur lecture en clair.
-* **Séparation Strict par Entreprise (`company_id`) :** Isolation absolue des données métier. Chaque requête et transaction est cloisonnée pour éviter toute fuite de données inter-entreprises.
+### 1. Validation des entrées et anti path traversal
+* `getSafePath()` (`src/backend/security.ts`) : résout les chemins et **refuse tout dépassement de l'arborescence du workspace** (`process.cwd()`) — utilisé par toutes les routes `/api/fs/*`.
+* `getSafeLogPath()` : restriction des chemins de logs à `/tmp/application.log` ou au workspace.
+* `validateString`, `validateOptionalString`, `validateInteger`, `validatePositiveInteger` : validation stricte de types pour éviter les attaques de type confusion / manipulation de paramètres.
 
-### 2. Sécurité des Communications IPC et API
-* **Validation Strict des Paramètres d'Entrée :** Toutes les routes d'API Express (`/api/*`) et de gestion de base de données (`/api/db/*`) valident formellement le type et la structure des données reçues (prévention contre la *Type Confusion* et l'injection SQL/commandes).
-* **Limitation du Débit (Rate Limiting) :** Un middleware de limitation (`express-rate-limit`) protège les routes d'écriture sensibles pour empêcher les attaques par force brute ou saturation.
-* **Résolution de Chemin Sécurisée (Anti-Path Traversal) :** L'accès aux fichiers locaux (par exemple, les fichiers de logs via `/api/logs`) est soumis à une validation de chemin rigoureuse (`getSafeLogPath`). Les chemins arbitraires hors du répertoire de l'application ou des répertoires temporaires autorisés sont systématiquement bloqués.
+### 2. Rate limiting (anti brute-force / anti abus)
+* `apiLimiter` : **500 requêtes / 15 min / IP** appliqué à toutes les routes `/api/*`.
+* `writeLimiter` : **60 opérations d'écriture / min / IP** sur les routes modifiant l'état (PTY, fichiers, DB).
+* `express-rate-limit` avec `standardHeaders` et désactivation du `x-forwarded-for` non validé.
 
-### 3. Cryptographie Moderne
-* **Remplacement du Chiffrement Cassé :** Conformément aux alertes DevSkim/CodeQL, les algorithmes obsolètes ou cassés (comme DES) sont proscrits au profit d'algorithmes de chiffrement modernes et sécurisés (AES-GCM, ou des mécanismes d'obfuscation locale robustes lorsque requis).
+### 3. Séparation des responsabilités
+* `PermissionService` (`src/backend/services.ts`) : vérification de rôles (`admin`, etc.) sur les opérations sensibles (ex : `/system/kill-process`).
+* Code modularisé : `routes.ts` (HTTP), `sync.ts` (WebSocket), `services.ts` (logique métier).
+
+### 4. Gestion des secrets
+* Clés API (ex : `GEMINI_API_KEY`) chargées via `dotenv` — **jamais dans le code source**.
+* `.env*` ignoré par git (`.gitignore`), seul `.env.example` (sans secrets) est versionné.
+
+### 5. Dépendances
+* Override forcée de `dompurify` vers la version patchée (`3.4.13`) dans `package.json`.
+* `SECURITY.md` vérifié par Dependabot sur les dépendances npm et crates Rust.
 
 ---
 
-## 📈 Versions Supportées
+## ⚠️ Limitations connues (à prendre en compte)
 
-Seules les versions listées ci-dessous reçoivent actuellement des correctifs de sécurité :
+Ces points sont **documentés comme faits** — ils doivent être corrigés avant toute exposition publique du serveur :
 
-| Version | Prise en charge | Notes |
-| :--- | :--- | :--- |
-| **v2.x** (Actuelle) | ✅ Oui | Version de production basée sur Tauri 2.x |
-| **v1.x** | ❌ Non | Obsolète, migration recommandée vers v2.x |
+| # | Limitation | Localisation | Risque |
+|---|---|---|---|
+| 1 | **Aucune authentification réelle** : le rôle est lu depuis l'en-tête HTTP `x-user-role`, **spoofable par le client** | `routes.ts` (`kill-process`, `maintenance`) | Un client peut s'auto-attribuer le rôle `admin` |
+| 2 | **Aucune authentification sur les routes FS/PTY/DB** : `/api/fs/*`, `/api/pty/*`, `/api/db/*` sont accessibles sans login | `routes.ts` | Lecture/écriture/suppression de fichiers par quiconque peut joindre le serveur |
+| 3 | **WebSocket sans authentification** : pas de `verifyClient`, pas de vérification d'origine | `sync.ts` | Connexion PTY ouverte à tout client |
+| 4 | **Serveur lié sur `0.0.0.0`** | `server.ts` | Exposition réseau complète |
+| 5 | **`exec()` pour lister les processus** (commande statique, sans input utilisateur — pas d'injection directe, mais à remplacer par une lib dédiée) | `routes.ts` | Baisse de robustesse |
+
+**Recommandation** : ne pas déployer ce serveur sur Internet sans avoir ajouté une authentification réelle (session/JWT), un `verifyClient` WebSocket, et une restriction du bind (localhost ou reverse proxy avec auth).
 
 ---
 
-## ✉️ Signaler une Vulnérabilité
+## 🔒 Versions supportées
 
-Si vous découvrez une faille de sécurité dans cette application, veuillez **ne pas l'exposer publiquement** (par exemple, via un ticket de suivi public ou sur les réseaux sociaux). Nous vous prions de suivre le protocole de divulgation responsable suivant :
+| Version | Support |
+|---|---|
+| `main` (développement) | ✅ Supportée — correctifs de sécurité appliqués |
+| Versions taguées | ✅ Supportées |
+| Autres branches | ❌ Non supportées |
 
-1. **Envoyer un Rapport Détaillé par E-mail :**
-   * Destinataire : [carpentier.thomas.02@gmail.com](mailto:carpentier.thomas.02@gmail.com)
-   * Objet : `[SECURITY] Rapport de Vulnérabilité - <Nom de la Faille>`
+---
 
-2. **Informations Souhaitées dans le Rapport :**
-   * Une description détaillée de la vulnérabilité et de son impact potentiel.
-   * Les étapes précises pour reproduire la faille (Proof of Concept - PoC).
-   * Toute suggestion de correction ou d'atténuation (si disponible).
+## 📢 Signaler une vulnérabilité
 
-3. **Processus de Résolution :**
-   * **Accusé de réception :** Nous accuserons réception de votre rapport sous 48 heures ouvrées.
-   * **Analyse & Correctif :** Une analyse approfondie sera menée et un correctif sera développé en priorité.
-   * **Divulgation publique :** Une fois le correctif déployé et validé, nous publierons les détails de la faille en vous créditant (avec votre accord).
+Merci de **ne pas ouvrir d'issue publique** pour les problèmes de sécurité.
+
+1. Utilisez le **GitHub Security Advisory** du dépôt : https://github.com/Thomasxxl02/terminal-linux/security/advisories
+2. Incluez : type de vulnérabilité, étapes de reproduction, impact potentiel, version(s) affectée(s).
+
+**Délais de réponse** :
+* Vulnérabilité critique (exécution de code, fuite de données massives) : réponse sous **48 h**
+* Vulnérabilité haute : réponse sous **72 h**
+* Autres : réponse sous **5 jours ouvrés**
+
+---
+
+*Document rédigé à partir des faits observés dans le code source. Les limitations listées ci-dessus sont volontairement exposées pour être corrigées — toute déclaration de sécurité doit être vérifiable dans le dépôt.*

@@ -2,7 +2,7 @@ use crate::pty::PtyManager;
 use lazy_static::lazy_static;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
-use tauri::{AppHandle, State, Wry};
+use tauri::{AppHandle, Wry};
 use serde::{Deserialize, Serialize};
 
 lazy_static! {
@@ -56,7 +56,9 @@ pub async fn resize_pty_session(session_id: String, cols: u16, rows: u16) -> Res
 #[tauri::command]
 pub async fn close_pty_session(session_id: String) -> Result<(), String> {
     let mut sessions = PTY_SESSIONS.lock().map_err(|e| e.to_string())?;
-    if sessions.remove(&session_id).is_some() {
+    if let Some(pty) = sessions.remove(&session_id) {
+        // Tuer le shell sous-jacent pour éviter les processus orphelins
+        pty.kill()?;
         Ok(())
     } else {
         Err(format!("Session PTY non trouvée : {}", session_id))
@@ -69,6 +71,8 @@ pub async fn get_system_stats() -> Result<SystemStats, String> {
         platform: std::env::consts::OS.to_string(),
         arch: std::env::consts::ARCH.to_string(),
         cpus: num_cpus::get_physical(),
-        os_release: "Linux 6.x / POSIX Native".to_string(),
+        os_release: std::fs::read_to_string("/proc/sys/kernel/osrelease")
+            .map(|s| s.trim().to_string())
+            .unwrap_or_else(|_| std::env::consts::OS.to_string()),
     })
 }
