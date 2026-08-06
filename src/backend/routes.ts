@@ -49,8 +49,19 @@ const writeLimiter = rateLimit({
 // Apply general rate limit to all routes
 router.use(apiLimiter);
 
+// Rate-limit strict anti brute-force sur le login (10 essais / 5 minutes)
+const loginLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Trop de tentatives de connexion, veuillez réessayer dans 5 minutes." },
+  skip: () => process.env.NODE_ENV === "test",
+  validate: { xForwardedForHeader: false },
+});
+
 // 0. Auth APIs + Health (publics — pas de JWT requis)
-router.post("/auth/login", handleLogin);
+router.post("/auth/login", loginLimiter, handleLogin);
 router.post("/auth/logout", handleLogout);
 router.get("/health", (req, res) => {
   res.json({ status: "ok", service: "Tauri Terminal PTY Backend" });

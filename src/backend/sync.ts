@@ -42,6 +42,25 @@ export function setupWebSockets(server: http.Server) {
   server.on("upgrade", (request, socket, head) => {
     const url = new URL(request.url || "", `http://${request.headers.host}`);
 
+    // Anti-CSWSH : si un navigateur fournit un Origin, il doit être dans la
+    // liste blanche (localhost web + webview Tauri). Les clients non-
+    // navigateurs (ws CLI, tests) n'envoient pas d'Origin → acceptés.
+    const origin = request.headers.origin;
+    if (origin) {
+      const allowedOrigins = (
+        process.env.WS_ALLOWED_ORIGINS ||
+        "http://localhost:3000,http://127.0.0.1:3000,tauri://localhost,http://tauri.localhost,https://tauri.localhost"
+      )
+        .split(",")
+        .map((o) => o.trim())
+        .filter(Boolean);
+      if (!allowedOrigins.includes(origin)) {
+        socket.write("HTTP/1.1 403 Forbidden\r\n\r\n");
+        socket.destroy();
+        return;
+      }
+    }
+
     // Authentification WebSocket : le JWT est passé en query param (?token=...).
     // Si l'auth est désactivée (pas de AUTH_SECRET), connexion acceptée (hérité).
     if (isAuthEnabled()) {

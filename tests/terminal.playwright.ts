@@ -6,18 +6,18 @@ test.describe("Linux PTY Terminal Flow", () => {
     await page.goto("/");
 
     // Wait for the app to finish loading
-    await expect(page).toHaveTitle(/Tauri/i);
+    await expect(page).toHaveTitle(/Linux Terminal Emulator/i);
 
     // 2. Ensure we have an active PTY session, or create one if none exists
+    // NB : try/catch — le welcome screen disparaît dès que la session est
+    // créée (le bouton se détache pendant le clic → on bascule sur "Nouveau").
     const welcomeScreenButton = page.locator("button:has-text('Ouvrir un nouveau Terminal Linux')");
     const newTabButton = page.locator("button[title='Ouvrir un nouvel onglet terminal (/bin/bash)']");
 
-    if (await welcomeScreenButton.isVisible()) {
-      // Click the welcome screen big action button
-      await welcomeScreenButton.click();
-    } else if (await newTabButton.isVisible()) {
-      // Click the "Nouveau" tab button in the terminal header
-      await newTabButton.click();
+    try {
+      await welcomeScreenButton.click({ timeout: 5000 });
+    } catch {
+      await newTabButton.click({ timeout: 5000 });
     }
 
     // Wait for the terminal views or active tab title to be visible to ensure PTY session created
@@ -28,8 +28,11 @@ test.describe("Linux PTY Terminal Flow", () => {
     await expect(commandInput).toBeVisible();
 
     // 4. Fill a test command into the command bar and execute it
+    // NB : pressSequentially (pas fill) — la session PTY se connecte en
+    // arrière-plan et un re-render écraserait la valeur posée trop vite.
     const testCommand = "echo 'PTY_TEST_SUCCESS'";
-    await commandInput.fill(testCommand);
+    await page.waitForTimeout(500); // laisser le terminal se stabiliser
+    await commandInput.pressSequentially(testCommand, { delay: 10 });
 
     // Click the execution button or press Enter
     const runButton = page.locator("button:has-text('Exécuter')");
@@ -45,9 +48,9 @@ test.describe("Linux PTY Terminal Flow", () => {
     await historyButton.click();
 
     // Check that the history dropdown contains our command
-    const historyDropdown = page.locator("div:has-text('COMMANDES RÉCENTES')");
+    const historyDropdown = page.locator("div:has-text('COMMANDES RÉCENTES')").first();
     await expect(historyDropdown).toBeVisible();
-    await expect(page.locator(`div:has-text('${testCommand}')`)).toBeVisible();
+    await expect(page.getByText(testCommand).first()).toBeVisible();
 
     // Close the history dropdown
     await historyButton.click();

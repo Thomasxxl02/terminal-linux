@@ -23,11 +23,39 @@ app.set("trust proxy", 1);
 // Express setup
 app.use(express.json());
 
-// Journalisation réelle des requêtes (méthode, chemin, statut final)
+// Journalisation réelle des requêtes (méthode, chemin, statut final).
+// Le polling stats/health est exclu : il spammerait le journal toutes les 4 s
+// et noierait le vrai signal (actions utilisateur, erreurs).
+const LOG_EXCLUDED_PREFIXES = ["/api/system/stats", "/api/health"];
 app.use((req, res, next) => {
   res.on("finish", () => {
-    logRequest(req.method, req.originalUrl, res.statusCode);
+    if (!LOG_EXCLUDED_PREFIXES.some((p) => req.originalUrl.startsWith(p))) {
+      logRequest(req.method, req.originalUrl, res.statusCode);
+    }
   });
+  next();
+});
+
+// Headers de sécurité HTTP (mode web). CSP permissive pour xterm.js +
+// Monaco (WebGL, workers, styles inline) ; inapplicable en webview Tauri
+// (tauri:// n'envoie pas de requêtes HTTP vers ce serveur).
+app.use((req, res, next) => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "DENY");
+  res.setHeader("Referrer-Policy", "no-referrer");
+  res.setHeader(
+    "Content-Security-Policy",
+    [
+      "default-src 'self'",
+      "script-src 'self' 'unsafe-eval' 'unsafe-inline'", // Vite HMR + Monaco workers
+      "style-src 'self' 'unsafe-inline'",
+      "img-src 'self' data: blob:",
+      "font-src 'self' data:",
+      "connect-src 'self' ws: wss:",
+      "worker-src 'self' blob:",
+      "frame-ancestors 'none'",
+    ].join("; ")
+  );
   next();
 });
 

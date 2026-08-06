@@ -37,9 +37,11 @@ interface TestWs extends WebSocket {
   __waiters: ((msg: unknown) => void)[];
 }
 
-function connect(port: number, path: string): Promise<TestWs> {
+function connect(port: number, path: string, origin?: string): Promise<TestWs> {
   return new Promise((resolve, reject) => {
-    const ws = new WebSocket(`ws://127.0.0.1:${port}${path}`) as TestWs;
+    const ws = new WebSocket(`ws://127.0.0.1:${port}${path}`, {
+      headers: origin ? { Origin: origin } : undefined,
+    }) as TestWs;
     ws.__queue = [];
     ws.__waiters = [];
 
@@ -105,6 +107,48 @@ describe("WebSockets (sync.ts) — flux PTY et logs", () => {
       // Timeout de sécurité
       setTimeout(() => resolve(), 500);
     });
+  });
+
+  it("rejette un Origin interdit (anti-CSWSH → 403)", async () => {
+    await new Promise<void>((resolve) => {
+      const ws = new WebSocket(`ws://127.0.0.1:${env.port}/ws/pty`, {
+        headers: { Origin: "https://evil.example.com" },
+      });
+      let saw403 = false;
+      ws.on("unexpected-response", (_req, res) => {
+        saw403 = res.statusCode === 403;
+        res.destroy();
+        resolve();
+      });
+      ws.on("close", () => resolve());
+      ws.on("error", () => resolve());
+      setTimeout(() => {
+        expect(saw403).toBe(true);
+        resolve();
+      }, 1000);
+    });
+  });
+
+  it("accepte un Origin localhost (anti-CSWSH → passage)", async () => {
+    const session = ptyService.createSession(
+      `ws_origin_${Date.now()}`,
+      "Origin OK",
+      process.cwd()
+    );
+    const ws = await connect(env.port, `/ws/pty?id=${session.id}`, "http://localhost:3000");
+    // Si l'origin est acceptée, la session répond connected (le buffer du
+    // shell peut précéder → on cherche le message connected)
+    let connected = false;
+    for (let i = 0; i < 5; i++) {
+      const msg = (await nextMessage(ws)) as { type: string };
+      if (msg.type === "connected") {
+        connected = true;
+        break;
+      }
+    }
+    expect(connected).toBe(true);
+    ws.close();
+    ptyService.deleteSession(session.id);
   });
 
   it("rejette une connexion PTY sans id de session", async () => {

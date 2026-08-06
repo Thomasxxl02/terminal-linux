@@ -44,9 +44,14 @@ npx tauri dev                 # fenêtre native + PTY Rust (portable-pty)
 ```bash
 npm run lint        # tsc --noEmit
 npm run test        # tests unitaires Vitest
-npm run test:e2e    # tests Playwright
+npm run test:e2e    # tests Playwright (démarre le serveur automatiquement)
+npm run check       # lint + tests unitaires + cargo check
 cd src-tauri && cargo test   # tests Rust (PTY bridge)
 ```
+
+> **Note** : `npm run check` n'inclut pas `test:e2e` volontairement (nécessite
+> un navigateur Chromium téléchargé + un serveur). Exécutez `npm run test:e2e`
+> séparément, notamment avant un release.
 
 ## ⚙️ Configuration
 

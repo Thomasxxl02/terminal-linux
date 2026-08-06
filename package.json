@@ -29,7 +29,6 @@
     "check:rust": "cd src-tauri && cargo check"
   },
   "dependencies": {
-    "@google/genai": "^2.4.0",
     "@monaco-editor/react": "^4.7.0",
     "@tauri-apps/api": "^2.11.1",
     "@xterm/addon-fit": "^0.11.0",
