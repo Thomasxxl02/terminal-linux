@@ -245,7 +245,7 @@ fn uptime_secs() -> u64 {
 }
 
 /// Un processus système (format compatible avec le backend web).
-#[derive(Serialize)]
+#[derive(Serialize, Clone)]
 pub struct ProcessInfo {
     pub pid: i32,
     pub user: String,
@@ -254,10 +254,28 @@ pub struct ProcessInfo {
     pub name: String,
 }
 
+// Cache court (2 s) du scan /proc : le frontend interroge les stats toutes
+// les 4 s — rescanner l'intégralité de /proc à chaque appel est inutile.
+lazy_static! {
+    static ref PROCESS_CACHE: std::sync::Mutex<Option<(std::time::Instant, Vec<ProcessInfo>)>> =
+        std::sync::Mutex::new(None);
+}
+
+const PROCESS_CACHE_TTL: std::time::Duration = std::time::Duration::from_secs(2);
+
 /// Liste les processus réels via /proc (top CPU, max 15) — zéro `exec`,
-/// lecture directe du pseudo-filesystem (même approche que le reste).
+/// lecture directe du pseudo-filesystem. Résultat mis en cache 2 s.
 #[tauri::command]
 pub fn list_processes() -> Result<Vec<ProcessInfo>, String> {
+    // Cache hit → retour direct
+    if let Ok(guard) = PROCESS_CACHE.lock() {
+        if let Some((at, cached)) = guard.as_ref() {
+            if at.elapsed() < PROCESS_CACHE_TTL {
+                return Ok(cached.clone());
+            }
+        }
+    }
+
     let mut procs: Vec<ProcessInfo> = Vec::new();
     let total_mem = total_memory();
 
@@ -345,6 +363,12 @@ pub fn list_processes() -> Result<Vec<ProcessInfo>, String> {
 
     procs.sort_by(|a, b| b.cpu.partial_cmp(&a.cpu).unwrap_or(std::cmp::Ordering::Equal));
     procs.truncate(15);
+
+    // Mise en cache du résultat (2 s)
+    if let Ok(mut guard) = PROCESS_CACHE.lock() {
+        *guard = Some((std::time::Instant::now(), procs.clone()));
+    }
+
     Ok(procs)
 }
 
