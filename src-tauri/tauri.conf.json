@@ -1,0 +1,74 @@
+{
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build",
+    "devPath": "http://localhost:3000",
+    "distDir": "../dist"
+  },
+  "package": {
+    "productName": "Tauri Terminal Linux",
+    "version": "0.1.0"
+  },
+  "tauri": {
+    "allowlist": {
+      "all": false,
+      "shell": {
+        "all": false,
+        "execute": true,
+        "open": true,
+        "sidecar": false
+      },
+      "dialog": {
+        "all": true
+      },
+      "fs": {
+        "all": true,
+        "scope": ["$HOME/**", "$TEMP/**"]
+      }
+    },
+    "bundle": {
+      "active": true,
+      "category": "DeveloperTool",
+      "copyright": "",
+      "deb": {
+        "depends": []
+      },
+      "externalBin": [],
+      "icon": [
+        "icons/32x32.png",
+        "icons/128x128.png",
+        "icons/128x128@2x.png",
+        "icons/icon.icns",
+        "icons/icon.ico"
+      ],
+      "identifier": "com.tauri.linuxterminal",
+      "longDescription": "Émulateur de terminal Linux hautement performant alimenté par Rust, portable-pty et Tauri",
+      "macOS": {
+        "frameworks": [],
+        "minimumSystemVersion": ""
+      },
+      "resources": [],
+      "shortDescription": "Terminal Linux Tauri + Rust",
+      "targets": "all",
+      "windows": {
+        "certificateThumbprint": null,
+        "digestAlgorithm": "sha256",
+        "timestampUrl": ""
+      }
+    },
+    "security": {
+      "csp": null
+    },
+    "windows": [
+      {
+        "fullscreen": false,
+        "height": 720,
+        "resizable": true,
+        "title": "Tauri Terminal Linux - Rust PTY",
+        "width": 1180,
+        "decorations": true,
+        "transparent": false
+      }
+    ]
+  }
+}

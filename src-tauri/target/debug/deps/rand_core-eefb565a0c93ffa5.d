@@ -1,0 +1,10 @@
+/media/thomas/70EDD22C28798071/linux-terminal-emulator/src-tauri/target/debug/deps/rand_core-eefb565a0c93ffa5.d: /home/thomas/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rand_core-0.6.4/src/lib.rs /home/thomas/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rand_core-0.6.4/src/block.rs /home/thomas/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rand_core-0.6.4/src/error.rs /home/thomas/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rand_core-0.6.4/src/impls.rs /home/thomas/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rand_core-0.6.4/src/le.rs /home/thomas/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rand_core-0.6.4/src/os.rs
+
+/media/thomas/70EDD22C28798071/linux-terminal-emulator/src-tauri/target/debug/deps/librand_core-eefb565a0c93ffa5.rmeta: /home/thomas/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rand_core-0.6.4/src/lib.rs /home/thomas/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rand_core-0.6.4/src/block.rs /home/thomas/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rand_core-0.6.4/src/error.rs /home/thomas/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rand_core-0.6.4/src/impls.rs /home/thomas/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rand_core-0.6.4/src/le.rs /home/thomas/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rand_core-0.6.4/src/os.rs
+
+/home/thomas/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rand_core-0.6.4/src/lib.rs:
+/home/thomas/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rand_core-0.6.4/src/block.rs:
+/home/thomas/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rand_core-0.6.4/src/error.rs:
+/home/thomas/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rand_core-0.6.4/src/impls.rs:
+/home/thomas/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rand_core-0.6.4/src/le.rs:
+/home/thomas/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rand_core-0.6.4/src/os.rs:

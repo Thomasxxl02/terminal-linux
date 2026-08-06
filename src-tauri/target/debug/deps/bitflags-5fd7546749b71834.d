@@ -1,0 +1,11 @@
+/media/thomas/70EDD22C28798071/linux-terminal-emulator/src-tauri/target/debug/deps/bitflags-5fd7546749b71834.d: /home/thomas/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bitflags-2.13.1/src/lib.rs /home/thomas/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bitflags-2.13.1/src/iter.rs /home/thomas/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bitflags-2.13.1/src/parser.rs /home/thomas/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bitflags-2.13.1/src/traits.rs /home/thomas/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bitflags-2.13.1/src/public.rs /home/thomas/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bitflags-2.13.1/src/internal.rs /home/thomas/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bitflags-2.13.1/src/external.rs
+
+/media/thomas/70EDD22C28798071/linux-terminal-emulator/src-tauri/target/debug/deps/libbitflags-5fd7546749b71834.rmeta: /home/thomas/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bitflags-2.13.1/src/lib.rs /home/thomas/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bitflags-2.13.1/src/iter.rs /home/thomas/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bitflags-2.13.1/src/parser.rs /home/thomas/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bitflags-2.13.1/src/traits.rs /home/thomas/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bitflags-2.13.1/src/public.rs /home/thomas/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bitflags-2.13.1/src/internal.rs /home/thomas/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bitflags-2.13.1/src/external.rs
+
+/home/thomas/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bitflags-2.13.1/src/lib.rs:
+/home/thomas/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bitflags-2.13.1/src/iter.rs:
+/home/thomas/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bitflags-2.13.1/src/parser.rs:
+/home/thomas/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bitflags-2.13.1/src/traits.rs:
+/home/thomas/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bitflags-2.13.1/src/public.rs:
+/home/thomas/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bitflags-2.13.1/src/internal.rs:
+/home/thomas/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bitflags-2.13.1/src/external.rs:

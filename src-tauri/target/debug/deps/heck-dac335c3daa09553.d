@@ -1,0 +1,13 @@
+/media/thomas/70EDD22C28798071/linux-terminal-emulator/src-tauri/target/debug/deps/heck-dac335c3daa09553.d: /home/thomas/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/heck-0.5.0/src/lib.rs /home/thomas/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/heck-0.5.0/src/kebab.rs /home/thomas/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/heck-0.5.0/src/lower_camel.rs /home/thomas/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/heck-0.5.0/src/shouty_kebab.rs /home/thomas/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/heck-0.5.0/src/shouty_snake.rs /home/thomas/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/heck-0.5.0/src/snake.rs /home/thomas/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/heck-0.5.0/src/title.rs /home/thomas/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/heck-0.5.0/src/train.rs /home/thomas/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/heck-0.5.0/src/upper_camel.rs
+
+/media/thomas/70EDD22C28798071/linux-terminal-emulator/src-tauri/target/debug/deps/libheck-dac335c3daa09553.rmeta: /home/thomas/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/heck-0.5.0/src/lib.rs /home/thomas/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/heck-0.5.0/src/kebab.rs /home/thomas/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/heck-0.5.0/src/lower_camel.rs /home/thomas/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/heck-0.5.0/src/shouty_kebab.rs /home/thomas/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/heck-0.5.0/src/shouty_snake.rs /home/thomas/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/heck-0.5.0/src/snake.rs /home/thomas/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/heck-0.5.0/src/title.rs /home/thomas/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/heck-0.5.0/src/train.rs /home/thomas/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/heck-0.5.0/src/upper_camel.rs
+
+/home/thomas/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/heck-0.5.0/src/lib.rs:
+/home/thomas/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/heck-0.5.0/src/kebab.rs:
+/home/thomas/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/heck-0.5.0/src/lower_camel.rs:
+/home/thomas/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/heck-0.5.0/src/shouty_kebab.rs:
+/home/thomas/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/heck-0.5.0/src/shouty_snake.rs:
+/home/thomas/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/heck-0.5.0/src/snake.rs:
+/home/thomas/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/heck-0.5.0/src/title.rs:
+/home/thomas/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/heck-0.5.0/src/train.rs:
+/home/thomas/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/heck-0.5.0/src/upper_camel.rs:

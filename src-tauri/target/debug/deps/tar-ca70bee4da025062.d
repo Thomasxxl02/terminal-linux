@@ -1,0 +1,12 @@
+/media/thomas/70EDD22C28798071/linux-terminal-emulator/src-tauri/target/debug/deps/tar-ca70bee4da025062.d: /home/thomas/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tar-0.4.46/src/lib.rs /home/thomas/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tar-0.4.46/src/archive.rs /home/thomas/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tar-0.4.46/src/builder.rs /home/thomas/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tar-0.4.46/src/entry.rs /home/thomas/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tar-0.4.46/src/entry_type.rs /home/thomas/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tar-0.4.46/src/error.rs /home/thomas/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tar-0.4.46/src/header.rs /home/thomas/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tar-0.4.46/src/pax.rs
+
+/media/thomas/70EDD22C28798071/linux-terminal-emulator/src-tauri/target/debug/deps/libtar-ca70bee4da025062.rmeta: /home/thomas/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tar-0.4.46/src/lib.rs /home/thomas/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tar-0.4.46/src/archive.rs /home/thomas/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tar-0.4.46/src/builder.rs /home/thomas/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tar-0.4.46/src/entry.rs /home/thomas/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tar-0.4.46/src/entry_type.rs /home/thomas/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tar-0.4.46/src/error.rs /home/thomas/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tar-0.4.46/src/header.rs /home/thomas/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tar-0.4.46/src/pax.rs
+
+/home/thomas/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tar-0.4.46/src/lib.rs:
+/home/thomas/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tar-0.4.46/src/archive.rs:
+/home/thomas/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tar-0.4.46/src/builder.rs:
+/home/thomas/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tar-0.4.46/src/entry.rs:
+/home/thomas/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tar-0.4.46/src/entry_type.rs:
+/home/thomas/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tar-0.4.46/src/error.rs:
+/home/thomas/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tar-0.4.46/src/header.rs:
+/home/thomas/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tar-0.4.46/src/pax.rs:
