@@ -645,6 +645,23 @@ router.get("/db/sync-report", async (req, res) => {
   }
 });
 
+// 6b. Vérification RÉELLE d'un port local (bind test — remplace l'ancienne table simulée)
+router.get("/network/port-check", (req, res) => {
+  const rawPort = req.query.port;
+  const port = typeof rawPort === "string" ? Number(rawPort) : NaN;
+  if (!Number.isInteger(port) || port <= 0 || port > 65535) {
+    return res.status(400).json({ error: "Port invalide" });
+  }
+  const net = require("net") as typeof import("net");
+  const tester = net.createServer();
+  tester.once("error", () => {
+    res.json({ available: false, port });
+  });
+  tester.listen(port, "127.0.0.1", () => {
+    tester.close(() => res.json({ available: true, port }));
+  });
+});
+
 // 7. Tauri Architecture Provider
 router.get("/tauri/source", (req, res) => {
   // Lit les VRAIS fichiers source Rust du projet (pas de placeholders)

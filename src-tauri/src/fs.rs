@@ -207,3 +207,14 @@ fn decode_base64(input: &str) -> Result<Vec<u8>, String> {
     }
     Ok(out)
 }
+
+/// Vérifie si un port local est libre en tentant un bind TCP réel
+/// (remplace l'ancien "port checker" simulé qui devinait avec une table).
+#[tauri::command]
+pub fn check_port(port: u16) -> Result<bool, String> {
+    use std::net::TcpListener;
+    match TcpListener::bind(("127.0.0.1", port)) {
+        Ok(_) => Ok(true),   // libre
+        Err(_) => Ok(false), // occupé
+    }
+}

@@ -33,6 +33,9 @@ import {
 import { SshHost, SshTunnel, TerminalSessionInfo } from "../types";
 import { useSecureStorage } from "../hooks/useSecureStorage";
 import { useLocalStorage } from "../hooks/useLocalStorage";
+import { apiFetch } from "../lib/api";
+import { isTauri, tauriInvoke } from "../lib/tauri";
+import { SshTunnelFormModal } from "./SshTunnelFormModal";
 
 const STORAGE_KEY_SSH = "terminal_ssh_hosts";
 const STORAGE_KEY_TUNNELS = "terminal_ssh_tunnels";
@@ -77,50 +80,11 @@ export const SshTunnelManager: React.FC<SshTunnelManagerProps> = ({
   const [diagnosticLogs, setDiagnosticLogs] = useState<string[]>([]);
   const [isDiagnosing, setIsDiagnosing] = useState(false);
 
-  // Form states
-  const [formName, setFormName] = useState("");
-  const [formHostId, setFormHostId] = useState("");
-  const [formType, setFormType] = useState<'local' | 'remote' | 'dynamic'>("local");
-  const [formLocalPort, setFormLocalPort] = useState<number>(8080);
-  const [formRemoteHost, setFormRemoteHost] = useState("localhost");
-  const [formRemotePort, setFormRemotePort] = useState<number>(80);
-  const [formAliveInterval, setFormAliveInterval] = useState<number>(60);
-  const [formExitOnFailure, setFormExitOnFailure] = useState<boolean>(true);
+  // (États du formulaire extraits dans SshTunnelFormModal)
 
-  // Update mock active traffic and chart history
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setTunnels((prevTunnels) =>
-        prevTunnels.map((t) => {
-          if (t.status === "active") {
-            // Add some mock traffic increments
-            const sentAdd = Math.floor(Math.random() * 5000) + 100;
-            const recvAdd = Math.floor(Math.random() * 15000) + 500;
-            const variance = Math.floor(Math.random() * 6) - 3;
-            const newLatency = Math.max(5, (t.latency || 20) + variance);
-
-            // Record history for sparkline
-            const latestRate = (sentAdd + recvAdd) / 1024; // KB/s
-            setChartHistory((prev) => {
-              const currentList = prev[t.id] || Array(12).fill(10);
-              const updatedList = [...currentList.slice(1), parseFloat(latestRate.toFixed(1))];
-              return { ...prev, [t.id]: updatedList };
-            });
-
-            return {
-              ...t,
-              trafficSent: (t.trafficSent || 0) + sentAdd,
-              trafficReceived: (t.trafficReceived || 0) + recvAdd,
-              latency: newLatency,
-            };
-          }
-          return t;
-        })
-      );
-    }, 2000);
-
-    return () => clearInterval(timer);
-  }, [setTunnels]);
+  // (La simulation de trafic actif a été supprimée : elle inventait des
+  //  octets/latences aléatoires pour des tunnels qui ne sont que des
+  //  commandes générées. Les compteurs restent à 0 jusqu'à une vraie mesure.)
 
   const getHostName = (hostId: string): string => {
     const host = hosts.find((h) => h.id === hostId);
@@ -172,47 +136,40 @@ export const SshTunnelManager: React.FC<SshTunnelManagerProps> = ({
 
   const handleOpenCreateModal = () => {
     setEditingTunnel(null);
-    setFormName("");
-    setFormHostId(hosts[0]?.id || "");
-    setFormType("local");
-    setFormLocalPort(8080);
-    setFormRemoteHost("localhost");
-    setFormRemotePort(80);
-    setFormAliveInterval(60);
-    setFormExitOnFailure(true);
     setIsModalOpen(true);
   };
 
   const handleOpenEditModal = (t: SshTunnel) => {
     setEditingTunnel(t);
-    setFormName(t.name);
-    setFormHostId(t.hostId);
-    setFormType(t.type);
-    setFormLocalPort(t.localPort);
-    setFormRemoteHost(t.remoteHost);
-    setFormRemotePort(t.remotePort);
-    setFormAliveInterval(t.serverAliveInterval || 60);
-    setFormExitOnFailure(t.exitOnFailure !== false);
     setIsModalOpen(true);
   };
 
-  const handleSaveTunnel = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!formName || !formHostId) return;
+  const handleSaveTunnel = (data: {
+    id?: string;
+    name: string;
+    hostId: string;
+    type: "local" | "remote" | "dynamic";
+    localPort: number;
+    remoteHost: string;
+    remotePort: number;
+    serverAliveInterval: number;
+    exitOnFailure: boolean;
+  }) => {
+    if (!data.name || !data.hostId) return;
 
     if (editingTunnel) {
       const updated = tunnels.map((t) =>
         t.id === editingTunnel.id
           ? {
               ...t,
-              name: formName,
-              hostId: formHostId,
-              type: formType,
-              localPort: Number(formLocalPort),
-              remoteHost: formType === "dynamic" ? "127.0.0.1" : formRemoteHost,
-              remotePort: formType === "dynamic" ? 0 : Number(formRemotePort),
-              serverAliveInterval: Number(formAliveInterval),
-              exitOnFailure: formExitOnFailure
+              name: data.name,
+              hostId: data.hostId,
+              type: data.type,
+              localPort: Number(data.localPort),
+              remoteHost: data.type === "dynamic" ? "127.0.0.1" : data.remoteHost,
+              remotePort: data.type === "dynamic" ? 0 : Number(data.remotePort),
+              serverAliveInterval: Number(data.serverAliveInterval),
+              exitOnFailure: data.exitOnFailure
             }
           : t
       );
@@ -220,19 +177,19 @@ export const SshTunnelManager: React.FC<SshTunnelManagerProps> = ({
     } else {
       const newTunnel: SshTunnel = {
         id: `tunnel_${Date.now()}`,
-        name: formName,
-        hostId: formHostId,
-        type: formType,
-        localPort: Number(formLocalPort),
-        remoteHost: formType === "dynamic" ? "127.0.0.1" : formRemoteHost,
-        remotePort: formType === "dynamic" ? 0 : Number(formRemotePort),
+        name: data.name,
+        hostId: data.hostId,
+        type: data.type,
+        localPort: Number(data.localPort),
+        remoteHost: data.type === "dynamic" ? "127.0.0.1" : data.remoteHost,
+        remotePort: data.type === "dynamic" ? 0 : Number(data.remotePort),
         status: "inactive",
         createdAt: Date.now(),
         trafficSent: 0,
         trafficReceived: 0,
         latency: 0,
-        serverAliveInterval: Number(formAliveInterval),
-        exitOnFailure: formExitOnFailure
+        serverAliveInterval: Number(data.serverAliveInterval),
+        exitOnFailure: data.exitOnFailure
       };
       setTunnels([...tunnels, newTunnel]);
     }
@@ -249,19 +206,11 @@ export const SshTunnelManager: React.FC<SshTunnelManagerProps> = ({
       prev.map((t) => {
         if (t.id === id) {
           const newStatus = t.status === "active" ? "inactive" : "active";
-          // Initialize sparkline on activation
-          if (newStatus === "active") {
-            setChartHistory((prevHist) => ({
-              ...prevHist,
-              [t.id]: Array(12).fill(15)
-            }));
-          }
+          // Pas de statistiques inventées : les compteurs restent à 0
+          // tant qu'aucune vraie mesure n'est disponible.
           return {
             ...t,
             status: newStatus,
-            trafficSent: newStatus === "active" ? 1024 : t.trafficSent,
-            trafficReceived: newStatus === "active" ? 2048 : t.trafficReceived,
-            latency: newStatus === "active" ? 22 : 0,
           };
         }
         return t;
@@ -282,20 +231,20 @@ export const SshTunnelManager: React.FC<SshTunnelManagerProps> = ({
     handleToggleTunnelStatus(t.id);
   };
 
-  // Diagnostic tool simulator
+  // Diagnostic simulé — les logs affichent clairement qu'aucun test réel
+  // n'est exécuté (pas de connexion SSH réelle derrière ce panneau).
   const handleRunDiagnostic = (t: SshTunnel) => {
     setDiagnosticTunnelId(t.id);
     setDiagnosticLogs([]);
     setIsDiagnosing(true);
 
     const logs = [
-      `[DIAG] Test de diagnostic pour: ${t.name}`,
-      `[CHECK] Résolution DNS de l'hôte distant... OK`,
-      `[CHECK] Vérification du port local ${t.localPort}... Port disponible.`,
-      `[SSH] Test d'initiation de la connexion asynchrone TCP...`,
-      `[SSH] Protocole de tunneling: Prise en charge ${t.type.toUpperCase()}`,
-      `[DIAG] Envoi de paquets de keep-alive (ServerAliveInterval: ${t.serverAliveInterval || 60}s)...`,
-      `[SUCCESS] Test d'établissement du bridge local <=> distant réussi ! Latence estimée: ${t.latency || 25}ms`
+      `[DIAG] Simulation de diagnostic pour: ${t.name}`,
+      `[INFO] Ce panneau ne se connecte à aucun serveur.`,
+      `[SIMULATION] Résolution DNS simulée... OK (aucun paquet envoyé)`,
+      `[SIMULATION] Vérification du port local ${t.localPort}... voir l'outil de port-check ci-dessous (test réel)`,
+      `[SIMULATION] Latence estimée: n/d (aucune mesure réelle)`,
+      `[FIN] Pour tester réellement ce tunnel, exécutez la commande dans le terminal.`
     ];
 
     let index = 0;
@@ -310,10 +259,11 @@ export const SshTunnelManager: React.FC<SshTunnelManagerProps> = ({
     }, 400);
   };
 
-  // Local Port Conflict Checker
-  const handlePortCheck = () => {
+  // Vérification RÉELLE d'un port local : bind test (Tauri) ou route
+  // Express /api/network/port-check (web). Aucune table simulée.
+  const handlePortCheck = async () => {
     const port = Number(checkPortInput);
-    if (!port || isNaN(port)) {
+    if (!port || isNaN(port) || port < 1 || port > 65535) {
       setPortCheckResult({
         status: "occupied",
         message: "Port invalide.",
@@ -322,34 +272,28 @@ export const SshTunnelManager: React.FC<SshTunnelManagerProps> = ({
       return;
     }
 
-    // Common occupied services simulation
-    const commonServices: Record<number, string> = {
-      80: "Serveur Web HTTP (Nginx / Apache)",
-      443: "Serveur Web Sécurisé HTTPS",
-      3306: "Base de Données MySQL",
-      5432: "Base de Données PostgreSQL",
-      27017: "Base de Données MongoDB",
-      6379: "Magasin de clés Redis",
-      3000: "Application Node.js / React (Dev Server)",
-      8080: "Serveur d'application alternatif (Tomcat, Jenkins)"
-    };
+    let available: boolean;
+    if (isTauri()) {
+      available = await tauriInvoke<boolean>("check_port", { port });
+    } else {
+      const res = await apiFetch(`/api/network/port-check?port=${port}`);
+      const data = await res.json();
+      available = data.available;
+    }
 
-    const isSimulatedOccupied = [80, 443, 3306, 3000].includes(port);
-
-    if (isSimulatedOccupied) {
+    if (!available) {
       setPortCheckResult({
         status: "occupied",
-        message: `Attention! Le port local ${port} semble occupé par : ${commonServices[port] || "un processus système alternatif"}.`,
+        message: `Le port local ${port} est OCCUPÉ (bind test réel).`,
         suggestions: [
-          `Arrêtez le service concurrent sur votre machine locale.`,
-          `Utilisez la commande shell : lsof -i :${port} (puis kill -9 PID) ou netstat -tulnp | grep ${port} pour diagnostiquer.`,
-          `Changez le port local du tunnel SSH dans le formulaire pour un port aléatoire libre (ex: 18080).`
+          `Utilisez la commande shell : lsof -i :${port} (puis kill -9 PID) ou netstat -tulnp | grep ${port} pour identifier le processus.`,
+          `Changez le port local du tunnel SSH dans le formulaire (ex: 18080).`
         ]
       });
     } else {
       setPortCheckResult({
         status: "free",
-        message: `Félicitations ! Le port local ${port} est libre et prêt à être lié par votre tunnel SSH.`,
+        message: `Le port local ${port} est libre et prêt à être lié par votre tunnel SSH.`,
         suggestions: [
           `Vous pouvez l'utiliser directement pour vos redirections locales (-L).`
         ]
@@ -670,179 +614,14 @@ export const SshTunnelManager: React.FC<SshTunnelManagerProps> = ({
         </div>
       </div>
 
-      {/* Create / Edit Modal Form */}
+      {/* Modal création/édition (composant extrait) */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-xl w-full max-w-md shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
-            <div className="p-4 border-b border-slate-800 flex items-center justify-between bg-slate-950/40 shrink-0">
-              <h3 className="font-bold text-slate-100 text-sm flex items-center gap-2">
-                <Workflow className="w-4 h-4 text-emerald-400" />
-                {editingTunnel ? "Éditer le Tunnel SSH" : "Nouveau Tunnel SSH / Port Forwarding"}
-              </h3>
-              <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-200">✕</button>
-            </div>
-
-            <form onSubmit={handleSaveTunnel} className="p-6 space-y-4 text-xs font-mono overflow-y-auto custom-scrollbar flex-1">
-              <div>
-                <label className="block text-slate-400 mb-1">Nom du Tunnel</label>
-                <input
-                  type="text"
-                  value={formName}
-                  onChange={(e) => setFormName(e.target.value)}
-                  placeholder="Ex: Redirection PostgreSQL"
-                  className="w-full bg-slate-950 border border-slate-800 rounded px-3 py-2 text-slate-100 focus:outline-none focus:border-emerald-500"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-slate-400 mb-1">Serveur d'Appui SSH (Hôte)</label>
-                <select
-                  value={formHostId}
-                  onChange={(e) => setFormHostId(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded px-3 py-2 text-slate-100 focus:outline-none focus:border-emerald-500"
-                  required
-                >
-                  {hosts.map((h) => (
-                    <option key={h.id} value={h.id}>{h.name} ({h.host})</option>
-                  ))}
-                  {hosts.length === 0 && <option value="">Aucun hôte configuré</option>}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-slate-400 mb-1">Type de Redirection (Forwarding Type)</label>
-                <div className="grid grid-cols-3 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setFormType("local");
-                      if (formLocalPort === 0) setFormLocalPort(8080);
-                    }}
-                    className={`py-1.5 px-2 border rounded text-center text-[10px] font-bold ${
-                      formType === "local" ? "bg-blue-500/10 border-blue-500/30 text-blue-300" : "bg-slate-950 border-slate-800 text-slate-400"
-                    }`}
-                  >
-                    Local (-L)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setFormType("remote");
-                      if (formLocalPort === 0) setFormLocalPort(8080);
-                    }}
-                    className={`py-1.5 px-2 border rounded text-center text-[10px] font-bold ${
-                      formType === "remote" ? "bg-purple-500/10 border-purple-500/30 text-purple-300" : "bg-slate-950 border-slate-800 text-slate-400"
-                    }`}
-                  >
-                    Distant (-R)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setFormType("dynamic");
-                      setFormLocalPort(1080);
-                    }}
-                    className={`py-1.5 px-2 border rounded text-center text-[10px] font-bold ${
-                      formType === "dynamic" ? "bg-amber-500/10 border-amber-500/30 text-amber-300" : "bg-slate-950 border-slate-800 text-slate-400"
-                    }`}
-                  >
-                    SOCKS (-D)
-                  </button>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-slate-400 mb-1">Port Local d'Écoute</label>
-                  <input
-                    type="number"
-                    value={formLocalPort}
-                    onChange={(e) => setFormLocalPort(Number(e.target.value))}
-                    className="w-full bg-slate-950 border border-slate-800 rounded px-3 py-2 text-slate-100 focus:outline-none focus:border-emerald-500"
-                    required
-                  />
-                </div>
-
-                {formType !== "dynamic" && (
-                  <div>
-                    <label className="block text-slate-400 mb-1">Port Distant Cible</label>
-                    <input
-                      type="number"
-                      value={formRemotePort}
-                      onChange={(e) => setFormRemotePort(Number(e.target.value))}
-                      className="w-full bg-slate-950 border border-slate-800 rounded px-3 py-2 text-slate-100 focus:outline-none focus:border-emerald-500"
-                      required
-                    />
-                  </div>
-                )}
-              </div>
-
-              {formType !== "dynamic" && (
-                <div>
-                  <label className="block text-slate-400 mb-1">Hôte Distant Cible (Remote Host)</label>
-                  <input
-                    type="text"
-                    value={formRemoteHost}
-                    onChange={(e) => setFormRemoteHost(e.target.value)}
-                    placeholder="localhost ou 127.0.0.1"
-                    className="w-full bg-slate-950 border border-slate-800 rounded px-3 py-2 text-slate-100 focus:outline-none focus:border-emerald-500"
-                    required
-                  />
-                </div>
-              )}
-
-              {/* Keep-Alive details */}
-              <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-800/60">
-                <div>
-                  <label className="block text-slate-400 mb-1" title="Envoi périodique de requêtes nulles pour maintenir actif le pont réseau">
-                    Intervalle Keep-Alive
-                  </label>
-                  <select
-                    value={formAliveInterval}
-                    onChange={(e) => setFormAliveInterval(Number(e.target.value))}
-                    className="w-full bg-slate-950 border border-slate-800 rounded px-3 py-2 text-slate-100 focus:outline-none focus:border-emerald-500"
-                  >
-                    <option value={15}>15 secondes</option>
-                    <option value={30}>30 secondes</option>
-                    <option value={60}>60 secondes</option>
-                    <option value={120}>120 secondes</option>
-                  </select>
-                </div>
-
-                <div className="flex flex-col justify-end pb-2">
-                  <label className="flex items-center gap-2 cursor-pointer text-slate-300">
-                    <input
-                      type="checkbox"
-                      checked={formExitOnFailure}
-                      onChange={(e) => setFormExitOnFailure(e.target.checked)}
-                      className="rounded border-slate-800 bg-slate-950 text-emerald-500 w-4 h-4 focus:ring-0 focus:outline-none"
-                    />
-                    <span title="Fermer le sous-processus de tunnelisation en cas de liaison impossible ou déjà lié">
-                      Fermer si échec
-                    </span>
-                  </label>
-                </div>
-              </div>
-
-              <div className="pt-4 border-t border-slate-800 flex justify-end gap-3 shrink-0">
-                <button
-                  type="button"
-                  onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg"
-                >
-                  Annuler
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-bold rounded-lg shadow"
-                >
-                  Enregistrer
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+        <SshTunnelFormModal
+          editingTunnel={editingTunnel}
+          hosts={hosts}
+          onSave={handleSaveTunnel}
+          onClose={() => setIsModalOpen(false)}
+        />
       )}
     </div>
   );

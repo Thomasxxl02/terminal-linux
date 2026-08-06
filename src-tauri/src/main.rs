@@ -33,7 +33,8 @@ fn main() {
             fs_create_file,
             fs_create_directory,
             fs_delete,
-            fs_rename
+            fs_rename,
+            check_port
         ])
         .run(tauri::generate_context!())
         .expect("Erreur lors du démarrage de l'application Tauri & Rust Terminal");
