@@ -49,6 +49,25 @@ export default defineConfig(() => {
       setupFiles: './src/test/setup.ts',
       include: ['src/test/**/*.{test,spec}.{ts,tsx}'],
       exclude: ['**/node_modules/**', '**/dist/**', '**/tests/**', '**/tests-examples/**'],
+      coverage: {
+        provider: 'v8',
+        reporter: ['text', 'html'],
+        include: ['src/**/*.{ts,tsx}'],
+        exclude: [
+          'src/test/**',
+          'src/backend/**',
+          'src/components/lazy.tsx',
+          'src/main.tsx',
+          'src/constants/**',
+        ],
+        thresholds: {
+          // Protège contre les régressions majeures ; monté au fil des tests
+          lines: 40,
+          functions: 30,
+          branches: 35,
+          statements: 40,
+        },
+      },
     },
   };
 });

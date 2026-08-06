@@ -20,11 +20,13 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
     "test:e2e": "playwright test",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build",
-    "check": "npm run lint && npm run test"
+    "check": "npm run lint && npm run test && npm run check:rust",
+    "check:rust": "cd src-tauri && cargo check"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
@@ -59,6 +61,7 @@
     "@types/supertest": "^7.2.1",
     "@types/ws": "^8.18.1",
     "@vitejs/plugin-react": "^5.0.4",
+    "@vitest/coverage-v8": "^4.1.10",
     "autoprefixer": "^10.4.21",
     "esbuild": "^0.25.0",
     "jsdom": "^30.0.1",
