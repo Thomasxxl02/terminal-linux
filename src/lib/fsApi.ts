@@ -29,6 +29,7 @@ interface RustFsItem {
   name: string;
   path: string;
   is_directory: boolean;
+  isDirectory?: boolean; // format web (routes Express)
   size: number;
 }
 
@@ -47,7 +48,8 @@ function normalizeTree(r: RawFsTree): FsTree {
   const items: FsItem[] = (r.items || []).map((i: RustFsItem) => ({
     name: i.name,
     path: i.path,
-    isDirectory: i.is_directory,
+    // Compatibilité web (isDirectory) ↔ Rust (is_directory)
+    isDirectory: i.isDirectory ?? i.is_directory,
     size: i.size ?? 0,
   }));
   return {
