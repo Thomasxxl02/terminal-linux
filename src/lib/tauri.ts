@@ -97,7 +97,11 @@ export async function createPtySessionWeb(
   cols = 80,
   rows = 24
 ): Promise<{ id: string; name: string; shell: string; cwd: string }> {
-  const sessionId = `pty_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+  // crypto.getRandomValues : aléa cryptographique (Math.random est insuffisant
+  // pour un identifiant — CodeQL js/unsafe-random)
+  const rand = new Uint32Array(1);
+  crypto.getRandomValues(rand);
+  const sessionId = `pty_${Date.now()}_${rand[0].toString(36)}`;
   await tauriInvoke("create_pty_session", {
     sessionId,
     cols,

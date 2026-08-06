@@ -5,28 +5,26 @@ import path from "path";
 import { WebSocket } from "ws";
 import * as db from "./db";
 
-// Liste blanche de shells autorisés : un chemin fourni par l'utilisateur
-// ne doit jamais être spawné tel quel (command injection / exécution arbitraire).
-const ALLOWED_SHELLS: readonly string[] = [
-  "/bin/bash",
-  "/usr/bin/bash",
-  "/bin/zsh",
-  "/usr/bin/zsh",
-  "/bin/sh",
-  "/usr/bin/sh",
-  "/bin/dash",
-  "/usr/bin/dash",
-  "/bin/ksh",
-  "/usr/bin/ksh",
-  "/usr/bin/fish",
-  "/usr/bin/pwsh",
-  "cmd.exe",
-  "powershell.exe",
-];
-
-function isAllowedShell(shellPath: string): boolean {
-  return ALLOWED_SHELLS.includes(shellPath) && fs.existsSync(shellPath);
-}
+// Liste blanche de shells autorisés, sous forme de mapping statique.
+// L'input utilisateur est utilisé UNIQUEMENT comme clé de lookup :
+// spawn() ne reçoit jamais une valeur dérivée directement de l'utilisateur,
+// mais une valeur issue de ce tableau constant (coupe le flux de taint).
+const ALLOWED_SHELLS: Record<string, string> = {
+  "/bin/bash": "/bin/bash",
+  "/usr/bin/bash": "/usr/bin/bash",
+  "/bin/zsh": "/bin/zsh",
+  "/usr/bin/zsh": "/usr/bin/zsh",
+  "/bin/sh": "/bin/sh",
+  "/usr/bin/sh": "/usr/bin/sh",
+  "/bin/dash": "/bin/dash",
+  "/usr/bin/dash": "/usr/bin/dash",
+  "/bin/ksh": "/bin/ksh",
+  "/usr/bin/ksh": "/usr/bin/ksh",
+  "/usr/bin/fish": "/usr/bin/fish",
+  "/usr/bin/pwsh": "/usr/bin/pwsh",
+  "cmd.exe": "cmd.exe",
+  "powershell.exe": "powershell.exe",
+};
 
 // PTY Session definition for PtyService
 export interface PtySession {
@@ -74,11 +72,11 @@ export class PtyService {
     const defaultShell = process.env.SHELL || (os.platform() === "win32" ? "cmd.exe" : "/bin/bash");
     const fallbackShell = os.platform() === "win32" ? "powershell.exe" : "/bin/sh";
     
-    let shellToUse = requestedShell || defaultShell;
-    // Sécurité : seul un shell de la liste blanche (et existant) est accepté.
-    // Un chemin arbitraire fourni par l'utilisateur est ignoré (fallback).
-    if (!isAllowedShell(shellToUse)) {
-      shellToUse = isAllowedShell(defaultShell) ? defaultShell : fallbackShell;
+    // Sécurité : l'input utilisateur est résolu via le mapping statique.
+    // requestedShell (ou defaultShell) sert de CLÉ, jamais de valeur directe.
+    let shellToUse = ALLOWED_SHELLS[requestedShell || ""] || ALLOWED_SHELLS[defaultShell] || fallbackShell;
+    if (!fs.existsSync(shellToUse)) {
+      shellToUse = fallbackShell;
     }
 
     const cwd = initialCwd && fs.existsSync(initialCwd) ? initialCwd : process.cwd();

@@ -80,7 +80,7 @@ router.post("/pty/create", writeLimiter, (req, res) => {
     const validatedShell = validateOptionalString(shell, "shell");
     const safeCwd = validatedCwd ? getSafePath(validatedCwd) : process.cwd();
 
-    const id = `pty_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const id = `pty_${Date.now()}_${crypto.randomUUID().slice(0, 6)}`;
     const session = ptyService.createSession(id, validatedName, safeCwd, validatedShell, env);
     res.json({
       id: session.id,
