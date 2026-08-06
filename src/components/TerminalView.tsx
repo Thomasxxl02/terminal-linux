@@ -127,7 +127,9 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       try {
         const serialized = JSON.stringify(updated);
         localStorage.setItem(STORAGE_KEY_HISTORY, serialized);
-      } catch {}
+      } catch {
+        // Stockage indisponible (mode privé) — l'historique reste en mémoire
+      }
       return updated;
     });
   };
@@ -136,7 +138,9 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
     setCommandHistory([]);
     try {
       localStorage.removeItem(STORAGE_KEY_HISTORY);
-    } catch {}
+    } catch {
+      // Stockage indisponible (mode privé) — rien à nettoyer
+    }
   };
 
   const triggerNotification = (title: string, body: string) => {
@@ -279,7 +283,9 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       webglAddon.onContextLoss(() => {
         try {
           webglAddon?.dispose();
-        } catch {}
+        } catch {
+          // Addon déjà disposé lors de la perte de contexte WebGL
+        }
         webglAddon = null;
       });
       term.loadAddon(webglAddon);
@@ -314,7 +320,10 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
 
     const sendInput = (data: string) => {
       if (tauriMode) {
-        tauriInvoke("write_pty_input", { sessionId: session.id, data }).catch(() => {});
+        tauriInvoke("write_pty_input", { sessionId: session.id, data }).catch((e) => {
+          console.error(`[PTY] Échec d'écriture session ${session.id}`, errMsg(e));
+          setStatusText("⚠️ Échec d'écriture PTY");
+        });
       } else if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ type: "input", data }));
       } else {
@@ -322,13 +331,18 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ data }),
-        }).catch(() => {});
+        }).catch((e) => {
+          console.error(`[PTY] Échec d'écriture session ${session.id}`, errMsg(e));
+          setStatusText("⚠️ Échec d'écriture PTY");
+        });
       }
     };
 
     const sendResize = (cols: number, rows: number) => {
       if (tauriMode) {
-        tauriInvoke("resize_pty_session", { sessionId: session.id, cols, rows }).catch(() => {});
+        tauriInvoke("resize_pty_session", { sessionId: session.id, cols, rows }).catch((e) => {
+          console.error(`[PTY] Échec resize session ${session.id}`, errMsg(e));
+        });
       } else if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ type: "resize", cols, rows }));
       }
@@ -433,7 +447,9 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
           fitAddon.fit();
           const dims = fitAddon.proposeDimensions();
           if (dims) sendResize(dims.cols, dims.rows);
-        } catch {}
+        } catch {
+          // Terminal pas encore attaché au DOM — resize ignoré
+        }
       }, 50);
     });
 
@@ -447,14 +463,17 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       resizeObserver.disconnect();
       if (tauriMode) {
         unlistenPty?.();
-        tauriInvoke("close_pty_session", { sessionId: session.id }).catch(() => {});
+        tauriInvoke("close_pty_session", { sessionId: session.id }).catch((e) => {
+          console.error(`[PTY] Échec fermeture session ${session.id}`, errMsg(e));
+        });
       } else if (ws && ws.readyState === WebSocket.OPEN) {
         ws.close();
       }
-      try { webglAddon?.dispose(); } catch {}
-      try { searchAddon.dispose(); } catch {}
-      try { webLinksAddon.dispose(); } catch {}
-      try { fitAddon.dispose(); } catch {}
+      // Dispose des addons : silencieux par design (déjà fermés/déconnectés)
+      try { webglAddon?.dispose(); } catch { /* addon déjà disposé */ }
+      try { searchAddon.dispose(); } catch { /* addon déjà disposé */ }
+      try { webLinksAddon.dispose(); } catch { /* addon déjà disposé */ }
+      try { fitAddon.dispose(); } catch { /* addon déjà disposé */ }
       term.dispose();
       xtermRef.current = null;
     };

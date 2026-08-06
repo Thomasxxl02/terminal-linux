@@ -28,6 +28,7 @@ import {
   logout,
   setAuth,
 } from "./lib/api";
+import { errMsg } from "./lib/errors";
 import { AuthScreen } from "./components/AuthScreen";
 import {
   closePtySessionWeb,
@@ -295,13 +296,17 @@ export default function App() {
 
     const cmdWithNewline = command.endsWith("\n") ? command : command + "\n";
     if (isTauri()) {
-      tauriInvoke("write_pty_input", { sessionId: targetId, data: cmdWithNewline }).catch(() => {});
+      tauriInvoke("write_pty_input", { sessionId: targetId, data: cmdWithNewline }).catch((e) => {
+        console.error(`[PTY] Échec d'envoi de commande à la session ${targetId}`, errMsg(e));
+      });
     } else {
       apiFetch(`/api/pty/${targetId}/write`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ data: cmdWithNewline }),
-      }).catch(() => {});
+      }).catch((e) => {
+        console.error(`[PTY] Échec d'envoi de commande à la session ${targetId}`, errMsg(e));
+      });
     }
   }, [activeSessionId, sessions, createSession]);
 

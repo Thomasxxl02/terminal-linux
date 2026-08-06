@@ -249,7 +249,9 @@ export const SkillsHub: React.FC<SkillsHubProps> = ({ onExecuteInTerminal }) => 
     if (saved) {
       try {
         currentCustoms = JSON.parse(saved);
-      } catch (e) {}
+      } catch (e) {
+        console.warn("[SkillsHub] JSON localStorage invalide, réinitialisation", e);
+      }
     }
 
     const updatedCustoms = [...currentCustoms, newSkill];
@@ -279,7 +281,9 @@ export const SkillsHub: React.FC<SkillsHubProps> = ({ onExecuteInTerminal }) => 
         if (activeSkillId === id) {
           setActiveSkillId("net-scan");
         }
-      } catch (err) {}
+      } catch (err) {
+        console.warn("[SkillsHub] Suppression impossible (JSON invalide)", err);
+      }
     }
   };
 

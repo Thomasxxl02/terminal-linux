@@ -219,7 +219,9 @@ export const PlaybookSequencer: React.FC<PlaybookSequencerProps> = ({
     setPlaybooks(updated);
     try {
       localStorage.setItem(STORAGE_KEY_PLAYBOOKS, JSON.stringify(updated));
-    } catch {}
+    } catch {
+      // Stockage indisponible (mode privé) — les playbooks restent en mémoire
+    }
   };
 
   const showNotification = (msg: string) => {
