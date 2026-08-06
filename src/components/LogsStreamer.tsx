@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState, useMemo } from "react";
+import { wsUrlWithToken } from "../lib/api";
 import {
   Play,
   Pause,
@@ -95,7 +96,7 @@ export const LogsStreamer: React.FC = () => {
 
     setErrorMsg(null);
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const wsUrl = `${protocol}//${window.location.host}/ws/logs?path=${encodeURIComponent(logPath)}`;
+    const wsUrl = wsUrlWithToken(`${protocol}//${window.location.host}/ws/logs?path=${encodeURIComponent(logPath)}`);
 
     try {
       const ws = new WebSocket(wsUrl);

@@ -4,6 +4,7 @@ import path from "path";
 import { WebSocketServer, WebSocket } from "ws";
 import { PtyService } from "./services";
 import { getSafeLogPath } from "./security";
+import { isAuthEnabled, verifyToken } from "./auth";
 
 const ptyService = PtyService.getInstance();
 
@@ -33,6 +34,18 @@ export function setupWebSockets(server: http.Server) {
 
   server.on("upgrade", (request, socket, head) => {
     const url = new URL(request.url || "", `http://${request.headers.host}`);
+
+    // Authentification WebSocket : le JWT est passé en query param (?token=...).
+    // Si l'auth est désactivée (pas de AUTH_SECRET), connexion acceptée (hérité).
+    if (isAuthEnabled()) {
+      const token = url.searchParams.get("token");
+      if (!token || !verifyToken(token)) {
+        socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
+        socket.destroy();
+        return;
+      }
+    }
+
     if (url.pathname.startsWith("/ws/pty")) {
       wssPty.handleUpgrade(request, socket, head, (ws) => {
         wssPty.emit("connection", ws, request);

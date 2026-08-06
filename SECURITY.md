@@ -18,15 +18,22 @@ Les protections suivantes sont implémentées dans le code source (vérifiables 
 * `writeLimiter` : **60 opérations d'écriture / min / IP** sur les routes modifiant l'état (PTY, fichiers, DB).
 * `express-rate-limit` avec `standardHeaders` et désactivation du `x-forwarded-for` non validé.
 
-### 3. Séparation des responsabilités
-* `PermissionService` (`src/backend/services.ts`) : vérification de rôles (`admin`, etc.) sur les opérations sensibles (ex : `/system/kill-process`).
+### 3. Authentification JWT (si `AUTH_SECRET` configuré)
+* `src/backend/auth.ts` : JWT HMAC-SHA256 natif (sans dépendance), validé par `requireAuth` sur **toutes** les routes `/api/*` (sauf `/auth/login` et `/health`).
+* Rôle (`admin` / `developer` / `guest`) **contenu dans le JWT signé** — le header `x-user-role` (précédemment spoofable) est **ignoré**.
+* Échange : `POST /api/auth/login` avec un token statique (`ADMIN_TOKEN` / `DEV_TOKEN` / `GUEST_TOKEN` en env) → JWT 12 h.
+* WebSocket `/ws/pty` et `/ws/logs` : JWT vérifié au handshake (`?token=`) — connexion refusée (401) sans token valide.
+* Permissions RBAC existantes (`PermissionService`) désormais alimentées par le rôle du JWT.
+
+### 4. Séparation des responsabilités
+* `PermissionService` (`src/backend/services.ts`) : vérification de rôles sur les opérations sensibles (ex : `/system/kill-process`).
 * Code modularisé : `routes.ts` (HTTP), `sync.ts` (WebSocket), `services.ts` (logique métier).
 
-### 4. Gestion des secrets
+### 5. Gestion des secrets
 * Clés API (ex : `GEMINI_API_KEY`) chargées via `dotenv` — **jamais dans le code source**.
 * `.env*` ignoré par git (`.gitignore`), seul `.env.example` (sans secrets) est versionné.
 
-### 5. Dépendances
+### 6. Dépendances
 * Override forcée de `dompurify` vers la version patchée (`3.4.13`) dans `package.json`.
 * `SECURITY.md` vérifié par Dependabot sur les dépendances npm et crates Rust.
 
@@ -38,13 +45,13 @@ Ces points sont **documentés comme faits** — ils doivent être corrigés avan
 
 | # | Limitation | Localisation | Risque |
 |---|---|---|---|
-| 1 | **Aucune authentification réelle** : le rôle est lu depuis l'en-tête HTTP `x-user-role`, **spoofable par le client** | `routes.ts` (`kill-process`, `maintenance`) | Un client peut s'auto-attribuer le rôle `admin` |
-| 2 | **Aucune authentification sur les routes FS/PTY/DB** : `/api/fs/*`, `/api/pty/*`, `/api/db/*` sont accessibles sans login | `routes.ts` | Lecture/écriture/suppression de fichiers par quiconque peut joindre le serveur |
-| 3 | **WebSocket sans authentification** : pas de `verifyClient`, pas de vérification d'origine | `sync.ts` | Connexion PTY ouverte à tout client |
-| 4 | **Serveur lié sur `0.0.0.0`** | `server.ts` | Exposition réseau complète |
-| 5 | **`exec()` pour lister les processus** (commande statique, sans input utilisateur — pas d'injection directe, mais à remplacer par une lib dédiée) | `routes.ts` | Baisse de robustesse |
+| 1 | **Auth désactivée si `AUTH_SECRET` absent** : sans cette variable d'environnement, toutes les routes restent ouvertes (comportement hérité, pratique pour le dev local mais **interdit en production**) | `auth.ts` | Déploiement sans `AUTH_SECRET` = aucune protection |
+| 2 | **Tokens statiques en clair dans l'URL WebSocket** : le JWT transite en query param `?token=` sur `/ws/pty` et `/ws/logs` (loggé par les reverse proxies) | `sync.ts`, `TerminalView.tsx`, `LogsStreamer.tsx` | Fuite possible du JWT dans les logs serveur |
+| 3 | **JWT en localStorage** : le token est stocké côté navigateur (XSS = vol de session) | `src/lib/api.ts` | À remplacer par des cookies `httpOnly` + CSRF si exposition publique |
+| 4 | **`exec()` pour lister les processus** (commande statique, sans input utilisateur — pas d'injection directe, mais à remplacer par une lib dédiée) | `routes.ts` | Baisse de robustesse |
+| 5 | **Aucun mécanisme de révocation de JWT** : un token volé reste valide 12 h | `auth.ts` | Rotation longue possible |
 
-**Recommandation** : ne pas déployer ce serveur sur Internet sans avoir ajouté une authentification réelle (session/JWT), un `verifyClient` WebSocket, et une restriction du bind (localhost ou reverse proxy avec auth).
+**Recommandation** : pour toute exposition publique, configurer `AUTH_SECRET` (min 32 caractères) + tokens statiques, et restreindre le bind (localhost ou reverse proxy).
 
 ---
 

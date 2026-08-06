@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback, useMemo } from "react";
 import Editor from "@monaco-editor/react";
 import { motion, AnimatePresence } from "motion/react";
+import { apiFetch } from "../lib/api";
 import {
   FileText,
   Folder,
@@ -202,7 +203,7 @@ export const MonacoFileEditor: React.FC<MonacoFileEditorProps> = ({
         ? `/api/fs/remote/tree?path=${encodeURIComponent(dirPath || "/home/developer")}&host=${activeHost ? encodeURIComponent(JSON.stringify(activeHost)) : ""}`
         : (dirPath ? `/api/fs/tree?path=${encodeURIComponent(dirPath)}` : "/api/fs/tree");
 
-      const res = await fetch(url);
+      const res = await apiFetch(url);
       const data = await res.json();
       if (data.items) {
         setItems(data.items);
@@ -234,7 +235,7 @@ export const MonacoFileEditor: React.FC<MonacoFileEditorProps> = ({
         ? `/api/fs/remote/read?path=${encodeURIComponent(filePath)}&host=${activeHost ? encodeURIComponent(JSON.stringify(activeHost)) : ""}`
         : `/api/fs/read?path=${encodeURIComponent(filePath)}`;
 
-      const res = await fetch(url);
+      const res = await apiFetch(url);
       const data = await res.json();
       if (data.content !== undefined) {
         const newTab: MonacoTab = {
@@ -318,7 +319,7 @@ export const MonacoFileEditor: React.FC<MonacoFileEditorProps> = ({
         ? { path: targetPath, content: tabToSave.content, host: activeHost ? JSON.stringify(activeHost) : null }
         : { path: targetPath, content: tabToSave.content };
 
-      const res = await fetch(url, {
+      const res = await apiFetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -359,7 +360,7 @@ export const MonacoFileEditor: React.FC<MonacoFileEditorProps> = ({
           ? { path: t.path, content: t.content, host: activeHost ? JSON.stringify(activeHost) : null }
           : { path: t.path, content: t.content };
 
-        const res = await fetch(url, {
+        const res = await apiFetch(url, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
@@ -411,7 +412,7 @@ export const MonacoFileEditor: React.FC<MonacoFileEditorProps> = ({
 
     try {
       if (fsMode === "remote") {
-        const res = await fetch("/api/fs/remote/write", {
+        const res = await apiFetch("/api/fs/remote/write", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -434,7 +435,7 @@ export const MonacoFileEditor: React.FC<MonacoFileEditorProps> = ({
         }
       } else {
         const endpoint = isFile ? "/api/fs/create-file" : "/api/fs/create-directory";
-        const res = await fetch(endpoint, {
+        const res = await apiFetch(endpoint, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ path: targetPath }),
@@ -472,10 +473,10 @@ export const MonacoFileEditor: React.FC<MonacoFileEditorProps> = ({
     try {
       if (fsMode === "remote") {
         // Mock remote FS rename fallback
-        const readRes = await fetch(`/api/fs/remote/read?path=${encodeURIComponent(item.path)}&host=${activeHost ? encodeURIComponent(JSON.stringify(activeHost)) : ""}`);
+        const readRes = await apiFetch(`/api/fs/remote/read?path=${encodeURIComponent(item.path)}&host=${activeHost ? encodeURIComponent(JSON.stringify(activeHost)) : ""}`);
         const readData = await readRes.json();
         
-        await fetch("/api/fs/remote/write", {
+        await apiFetch("/api/fs/remote/write", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -503,7 +504,7 @@ export const MonacoFileEditor: React.FC<MonacoFileEditorProps> = ({
         setRenamingPath(null);
         fetchTree(currentPath);
       } else {
-        const res = await fetch("/api/fs/rename", {
+        const res = await apiFetch("/api/fs/rename", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ oldPath: item.path, newPath }),
@@ -552,7 +553,7 @@ export const MonacoFileEditor: React.FC<MonacoFileEditorProps> = ({
         // Refresh
         fetchTree(currentPath);
       } else {
-        const res = await fetch("/api/fs/delete", {
+        const res = await apiFetch("/api/fs/delete", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ path: deletingItem.path }),
@@ -604,7 +605,7 @@ export const MonacoFileEditor: React.FC<MonacoFileEditorProps> = ({
           
           if (fsMode === "remote") {
             // Write to remote node endpoint
-            await fetch("/api/fs/remote/write", {
+            await apiFetch("/api/fs/remote/write", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
@@ -615,7 +616,7 @@ export const MonacoFileEditor: React.FC<MonacoFileEditorProps> = ({
             });
           } else {
             // Write to local node endpoint with base64
-            await fetch("/api/fs/write", {
+            await apiFetch("/api/fs/write", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({

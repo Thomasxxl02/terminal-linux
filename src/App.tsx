@@ -15,6 +15,15 @@ import { SshTunnelManager } from "./components/SshTunnelManager";
 import { LogsStreamer } from "./components/LogsStreamer";
 import { WebShortcutsManager } from "./components/WebShortcutsManager";
 import { TerminalSessionInfo, SystemStats, ShellProfile, SavedTabSession, SshHost } from "./types";
+import {
+  apiFetch,
+  clearAuth,
+  getToken,
+  isAuthenticated,
+  login,
+  setAuth,
+} from "./lib/api";
+import { AuthScreen } from "./components/AuthScreen";
 
 
 const MonacoFileEditor = lazy(() =>
@@ -29,6 +38,10 @@ export default function App() {
   const [fontSize, setFontSize] = useState<number>(14);
   const [systemStats, setSystemStats] = useState<SystemStats | null>(null);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
+
+  // Auth state : l'app affiche l'écran de connexion si le serveur exige un JWT
+  const [authChecked, setAuthChecked] = useState<boolean>(false);
+  const [authRequired, setAuthRequired] = useState<boolean>(true);
 
   // File path state to open directly into Monaco Editor
   const [monacoFilePath, setMonacoFilePath] = useState<string>("");
@@ -75,7 +88,14 @@ export default function App() {
   // Fetch PTY sessions list from server
   const fetchSessions = useCallback(async () => {
     try {
-      const res = await fetch("/api/pty/sessions");
+      const res = await apiFetch("/api/pty/sessions");
+      if (res.status === 401) {
+        // JWT manquant ou expiré → exiger une connexion
+        clearAuth();
+        setAuthRequired(true);
+        setAuthChecked(true);
+        return;
+      }
       const data = await res.json();
       if (data.sessions) {
         setSessions(data.sessions);
@@ -88,10 +108,44 @@ export default function App() {
     }
   }, [activeSessionId]);
 
+  // Au montage : vérifier si le serveur exige un JWT
+  useEffect(() => {
+    const checkAuth = async () => {
+      try {
+        const res = await apiFetch("/api/pty/sessions");
+        if (res.status === 401) {
+          clearAuth();
+          setAuthRequired(true);
+        } else {
+          setAuthRequired(false);
+        }
+      } catch {
+        setAuthRequired(true);
+      }
+      setAuthChecked(true);
+    };
+    checkAuth();
+  }, []);
+
+  // Login : échange le token statique contre un JWT, puis recharge l'app
+  const handleLogin = useCallback(async (staticToken: string) => {
+    const result = await login(staticToken);
+    setAuth(result.token, result.role);
+    if (!result.authEnabled) {
+      // Serveur sans AUTH_SECRET : pas de JWT requis, tout passe
+      setAuthRequired(false);
+    } else {
+      setAuthRequired(false);
+      setAuthChecked(true);
+    }
+    fetchSessions();
+    fetchSystemStats();
+  }, [fetchSessions, fetchSystemStats]);
+
   // Fetch System Statistics
   const fetchSystemStats = useCallback(async () => {
     try {
-      const res = await fetch("/api/system/stats");
+      const res = await apiFetch("/api/system/stats");
       const data = await res.json();
       setSystemStats(data);
     } catch (e) {
@@ -114,7 +168,7 @@ export default function App() {
   const handleCreateSession = async () => {
     try {
       const sessionCount = sessions.length + 1;
-      const res = await fetch("/api/pty/create", {
+      const res = await apiFetch("/api/pty/create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: `Terminal #${sessionCount} - Bash` }),
@@ -133,7 +187,7 @@ export default function App() {
   // Close PTY Session
   const handleCloseSession = useCallback(async (id: string) => {
     try {
-      await fetch(`/api/pty/${id}`, { method: "DELETE" });
+      await apiFetch(`/api/pty/${id}`, { method: "DELETE" });
       setSessions((prev) => {
         const updated = prev.filter((s) => s.id !== id);
         setActiveSessionId((currentActive) =>
@@ -151,7 +205,7 @@ export default function App() {
     let targetId = specificSessionId || activeSessionId;
 
     if (!targetId || !sessions.some((s) => s.id === targetId)) {
-      const res = await fetch("/api/pty/create", {
+      const res = await apiFetch("/api/pty/create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: `Terminal Maintenance - Bash` }),
@@ -165,7 +219,7 @@ export default function App() {
     setActiveView("terminal");
 
     const cmdWithNewline = command.endsWith("\n") ? command : command + "\n";
-    fetch(`/api/pty/${targetId}/write`, {
+    apiFetch(`/api/pty/${targetId}/write`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ data: cmdWithNewline }),
@@ -175,7 +229,7 @@ export default function App() {
   // Launch terminal session with custom profile
   const handleLaunchProfile = useCallback(async (profile: ShellProfile) => {
     try {
-      const res = await fetch("/api/pty/create", {
+      const res = await apiFetch("/api/pty/create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -204,7 +258,7 @@ export default function App() {
   const handleRestoreSavedTabs = useCallback(async (savedTabs: SavedTabSession[]) => {
     for (const tab of savedTabs) {
       try {
-        const res = await fetch("/api/pty/create", {
+        const res = await apiFetch("/api/pty/create", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -236,7 +290,7 @@ export default function App() {
     cmd += `${host.username}@${host.host}`;
 
     try {
-      const res = await fetch("/api/pty/create", {
+      const res = await apiFetch("/api/pty/create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -271,6 +325,11 @@ export default function App() {
 
   return (
     <div className={`flex h-screen w-screen overflow-hidden bg-slate-950 text-slate-100 ${isFullscreen ? "fixed inset-0 z-50" : ""}`}>
+      {/* Écran de connexion si le serveur exige un JWT */}
+      {authChecked && authRequired && !isAuthenticated() && (
+        <AuthScreen onLogin={handleLogin} />
+      )}
+
       {/* Command Palette Overlay */}
       <CommandPalette
         isOpen={isCommandPaletteOpen}

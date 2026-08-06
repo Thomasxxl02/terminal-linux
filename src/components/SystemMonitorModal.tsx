@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { apiFetch } from "../lib/api";
 import {
   Activity,
   Cpu,
@@ -190,7 +191,7 @@ export const SystemMonitorModal: React.FC<SystemMonitorModalProps> = ({
 
   const handleKillProcess = async (pid: number) => {
     try {
-      const res = await fetch("/api/system/kill-process", {
+      const res = await apiFetch("/api/system/kill-process", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ pid }),

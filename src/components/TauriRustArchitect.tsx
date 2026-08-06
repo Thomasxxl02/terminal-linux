@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import Editor from "@monaco-editor/react";
+import { apiFetch } from "../lib/api";
 import {
   Box,
   Copy,
@@ -70,7 +71,7 @@ export const TauriRustArchitect: React.FC = () => {
   const [benchResults, setBenchResults] = useState<Record<string, { latency: number; fps: number; cpu: number; ram: number }> | null>(null);
 
   useEffect(() => {
-    fetch("/api/tauri/source")
+    apiFetch("/api/tauri/source")
       .then((res) => res.json())
       .then((data) => setSourceCode(data))
       .catch((e) => console.error("Failed to fetch Tauri source code", e));

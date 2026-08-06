@@ -17,6 +17,10 @@ import {
   validateOptionalString,
   validatePositiveInteger,
 } from "./security";
+import {
+  handleLogin,
+  requireAuth,
+} from "./auth";
 
 const router = Router();
 const ptyService = PtyService.getInstance();
@@ -46,12 +50,16 @@ const writeLimiter = rateLimit({
 // Apply general rate limit to all routes
 router.use(apiLimiter);
 
-// 1. Health API
+// 0. Auth APIs + Health (publics — pas de JWT requis)
+router.post("/auth/login", handleLogin);
 router.get("/health", (req, res) => {
   res.json({ status: "ok", service: "Tauri Terminal PTY Backend" });
 });
 
-// 2. PTY Sessions APIs (Maps HTTP Requests to PtyService)
+// Toutes les routes suivantes exigent un JWT valide (si AUTH_SECRET configuré)
+router.use(requireAuth);
+
+// 1. PTY Sessions APIs (Maps HTTP Requests to PtyService)
 router.get("/pty/sessions", (req, res) => {
   const sessions = ptyService.getAllSessions().map((s) => ({
     id: s.id,
@@ -97,8 +105,8 @@ router.post("/pty/:id/write", writeLimiter, (req, res) => {
       return res.status(404).json({ error: "Session non trouvée" });
     }
 
-    // Permissions validation logic
-    const role = (req.headers["x-user-role"] as string) || "admin";
+    // Permissions validation logic — rôle issu du JWT, jamais d'un header client
+    const role = (req as any).user?.role || "guest";
     if (!PermissionService.isAuthorized(role, "execute_terminal")) {
       return res.status(403).json({ error: "Action non autorisée pour ce rôle" });
     }
@@ -297,8 +305,8 @@ router.post("/system/kill-process", writeLimiter, (req, res) => {
     const { pid } = req.body;
     const validatedPid = validatePositiveInteger(pid, "pid");
 
-    // Security Policy validation
-    const role = (req.headers["x-user-role"] as string) || "admin";
+    // Security Policy validation — rôle issu du JWT
+    const role = (req as any).user?.role || "guest";
     if (!PermissionService.isAuthorized(role, "write_system")) {
       return res.status(403).json({ error: "Privilèges insuffisants pour arrêter un processus système" });
     }
@@ -417,8 +425,8 @@ router.post("/fs/write", writeLimiter, async (req, res) => {
     const validatedContent = validateString(content, "content");
     const validatedEncoding = validateOptionalString(encoding, "encoding");
 
-    // Role-based path security checks
-    const role = (req.headers["x-user-role"] as string) || "admin";
+    // Role-based path security checks — rôle issu du JWT
+    const role = (req as any).user?.role || "guest";
     if (!PermissionService.validatePathAccess(safeFile, role)) {
       return res.status(403).json({ error: "Accès restreint à ce dossier pour votre niveau de permissions" });
     }
@@ -465,7 +473,7 @@ router.post("/fs/delete", writeLimiter, async (req, res) => {
     const safeItem = getSafePath(itemPath);
     if (!fs.existsSync(safeItem)) return res.status(404).json({ error: "Élément introuvable" });
 
-    const role = (req.headers["x-user-role"] as string) || "admin";
+    const role = (req as any).user?.role || "guest";
     if (!PermissionService.validatePathAccess(safeItem, role)) {
       return res.status(403).json({ error: "Privilèges insuffisants pour supprimer des fichiers système" });
     }

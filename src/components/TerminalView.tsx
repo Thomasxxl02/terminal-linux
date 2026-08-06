@@ -31,6 +31,7 @@ import {
 import { TerminalSessionInfo, TerminalTheme, FileTreeItem } from "../types";
 import { TERMINAL_THEMES } from "../constants/themes";
 import { encryptValue, decryptValue } from "../hooks/useLocalStorage";
+import { apiFetch, wsUrlWithToken } from "../lib/api";
 
 interface TerminalViewProps {
   session: TerminalSessionInfo;
@@ -153,7 +154,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
     try {
       const dirPath = targetDir || session.cwd || process.cwd();
       const url = `/api/fs/tree?path=${encodeURIComponent(dirPath)}`;
-      const res = await fetch(url);
+      const res = await apiFetch(url);
       const data = await res.json();
       if (data.items) {
         setFileItems(data.items);
@@ -289,7 +290,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
 
     // Establish WebSocket connection to backend PTY server
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const wsUrl = `${protocol}//${window.location.host}/ws/pty?id=${session.id}`;
+    const wsUrl = wsUrlWithToken(`${protocol}//${window.location.host}/ws/pty?id=${session.id}`);
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
 
@@ -363,7 +364,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       if (ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ type: "input", data }));
       } else {
-        fetch(`/api/pty/${session.id}/write`, {
+        apiFetch(`/api/pty/${session.id}/write`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ data }),
