@@ -20,16 +20,24 @@
 
 ## 🚀 Démarrage local
 
-**Prérequis :** Node.js 22+
+**Prérequis :** Node.js 22+ (frontend), Rust stable + dépendances Tauri (desktop)
 
+**Mode web (dev) :**
 ```bash
 npm install
 npm run dev
 ```
-
 Le serveur démarre sur `http://localhost:3000` (backend Express + WebSocket, middleware Vite en dev).
 
-> Note : le mode desktop (`src-tauri/`) nécessite Rust et les dépendances système Tauri. L'application web est entièrement autonome sans cette couche.
+**Mode desktop Tauri (Linux) :**
+```bash
+npm install
+cd src-tauri && cargo check   # valider le backend Rust
+npm run dev:tauri             # serveur Vite pur (frontend seul)
+npx tauri dev                 # fenêtre native + PTY Rust (portable-pty)
+```
+
+> L'application cible est **Tauri** : le terminal (xterm.js) est branché sur les commandes Rust (`create_pty_session`, `write_pty_input`, `resize_pty_session`, `close_pty_session`) via `invoke()`, et la sortie PTY arrive par l'événement Tauri `pty-output`. Le backend Express/WebSocket reste disponible en mode web, mais n'est pas requis en desktop.
 
 ## 🧪 Tests
 

@@ -14,6 +14,7 @@ fn main() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
             create_pty_session,
+            list_pty_sessions,
             write_pty_input,
             resize_pty_session,
             close_pty_session,

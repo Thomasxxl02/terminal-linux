@@ -32,6 +32,7 @@ import { TerminalSessionInfo, TerminalTheme, FileTreeItem } from "../types";
 import { TERMINAL_THEMES } from "../constants/themes";
 import { encryptValue, decryptValue } from "../hooks/useLocalStorage";
 import { apiFetch, wsUrlWithToken } from "../lib/api";
+import { isTauri, tauriInvoke, tauriListen, PtyOutputEvent } from "../lib/tauri";
 
 interface TerminalViewProps {
   session: TerminalSessionInfo;
@@ -86,6 +87,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
   // Process timing tracker for long-running process notifications
   const lastInputTimeRef = useRef<number>(0);
   const activeCommandRef = useRef<string>("");
+  const lineBufferRef = useRef<string>("");
 
   const currentTheme =
     TERMINAL_THEMES.find((t) => t.id === activeThemeId) || TERMINAL_THEMES[0];
@@ -288,63 +290,119 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
     fitAddonRef.current = fitAddon;
     searchAddonRef.current = searchAddon;
 
-    // Establish WebSocket connection to backend PTY server
-    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const wsUrl = wsUrlWithToken(`${protocol}//${window.location.host}/ws/pty?id=${session.id}`);
-    const ws = new WebSocket(wsUrl);
-    wsRef.current = ws;
+    // ── Connexion PTY : mode Tauri (invoke Rust) ou WebSocket (fallback web) ──
+    const tauriMode = isTauri();
+    let unlistenPty: (() => void) | null = null;
+    let ws: WebSocket | null = null;
 
-    ws.onopen = () => {
-      setIsConnected(true);
-      setStatusText("Connecté au PTY Linux");
-      const dims = fitAddon.proposeDimensions();
-      if (dims) {
-        ws.send(JSON.stringify({ type: "resize", cols: dims.cols, rows: dims.rows }));
+    const handlePtyOutput = (data: string) => {
+      term.write(data);
+      lineBufferRef.current += data;
+
+      // Check for process finish or long execution trigger
+      const elapsedSec = (Date.now() - lastInputTimeRef.current) / 1000;
+      if (elapsedSec > 4 && activeCommandRef.current) {
+        triggerNotification(
+          "⚙️ PTY Linux - Exécution Terminée",
+          `La commande "${activeCommandRef.current.slice(0, 40)}" s'est terminée (${elapsedSec.toFixed(1)}s).`
+        );
+        activeCommandRef.current = "";
       }
     };
 
-    let lineBuffer = "";
+    const sendInput = (data: string) => {
+      if (tauriMode) {
+        tauriInvoke("write_pty_input", { sessionId: session.id, data }).catch(() => {});
+      } else if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: "input", data }));
+      } else {
+        apiFetch(`/api/pty/${session.id}/write`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ data }),
+        }).catch(() => {});
+      }
+    };
 
-    ws.onmessage = (event) => {
-      try {
-        const msg = JSON.parse(event.data);
-        if (msg.type === "output") {
-          term.write(msg.data);
-          lineBuffer += msg.data;
+    const sendResize = (cols: number, rows: number) => {
+      if (tauriMode) {
+        tauriInvoke("resize_pty_session", { sessionId: session.id, cols, rows }).catch(() => {});
+      } else if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: "resize", cols, rows }));
+      }
+    };
 
-          // Check for process finish or long execution trigger
-          const elapsedSec = (Date.now() - lastInputTimeRef.current) / 1000;
-          if (elapsedSec > 4 && activeCommandRef.current) {
-            triggerNotification(
-              "⚙️ PTY Linux - Exécution Terminée",
-              `La commande "${activeCommandRef.current.slice(0, 40)}" s'est terminée (${elapsedSec.toFixed(1)}s).`
-            );
-            activeCommandRef.current = "";
-          }
-        } else if (msg.type === "exit") {
+    const connect = async () => {
+      if (tauriMode) {
+        // Mode desktop : le PTY vit dans le processus Rust
+        try {
+          const dims = fitAddon.proposeDimensions();
+          await tauriInvoke("create_pty_session", {
+            sessionId: session.id,
+            cols: dims?.cols || 80,
+            rows: dims?.rows || 24,
+          });
+          unlistenPty = await tauriListen<PtyOutputEvent>("pty-output", (payload) => {
+            if (payload.session_id === session.id) {
+              handlePtyOutput(payload.data);
+            }
+          });
+          setIsConnected(true);
+          setStatusText("Connecté au PTY Rust (Tauri)");
+          if (dims) sendResize(dims.cols, dims.rows);
+        } catch (e: any) {
+          setStatusText(`Erreur PTY Rust : ${e?.message || e}`);
           setIsConnected(false);
-          setStatusText(`Processus terminé (code ${msg.code})`);
-          triggerNotification(
-            "🔴 Processus PTY Linux Terminé",
-            `Session ${session.name} terminée avec le code de sortie ${msg.code}.`
-          );
         }
-      } catch {
-        term.write(event.data);
+        return;
       }
-    };
 
-    ws.onerror = () => {
-      setStatusText("Erreur de websocket. Tentative HTTP...");
-      setIsConnected(false);
-    };
+      // Mode web : WebSocket vers le backend Node
+      const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+      const wsUrl = wsUrlWithToken(`${protocol}//${window.location.host}/ws/pty?id=${session.id}`);
+      ws = new WebSocket(wsUrl);
+      wsRef.current = ws;
 
-    ws.onclose = () => {
-      setIsConnected(false);
-      setStatusText("Déconnecté");
-    };
+      ws.onopen = () => {
+        setIsConnected(true);
+        setStatusText("Connecté au PTY Linux");
+        const dims = fitAddon.proposeDimensions();
+        if (dims) {
+          ws!.send(JSON.stringify({ type: "resize", cols: dims.cols, rows: dims.rows }));
+        }
+      };
 
-    // User keyboard input => send to PTY stdin via WebSocket
+      ws.onmessage = (event) => {
+        try {
+          const msg = JSON.parse(event.data);
+          if (msg.type === "output") {
+            handlePtyOutput(msg.data);
+          } else if (msg.type === "exit") {
+            setIsConnected(false);
+            setStatusText(`Processus terminé (code ${msg.code})`);
+            triggerNotification(
+              "🔴 Processus PTY Linux Terminé",
+              `Session ${session.name} terminée avec le code de sortie ${msg.code}.`
+            );
+          }
+        } catch {
+          handlePtyOutput(event.data);
+        }
+      };
+
+      ws.onerror = () => {
+        setStatusText("Erreur de websocket. Tentative HTTP...");
+        setIsConnected(false);
+      };
+
+      ws.onclose = () => {
+        setIsConnected(false);
+        setStatusText("Déconnecté");
+      };
+    };
+    connect();
+
+    // User keyboard input => PTY stdin (Tauri invoke ou WebSocket)
     let currentInputString = "";
     const onDataDisposable = term.onData((data) => {
       // Collect enter presses to save history
@@ -361,15 +419,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
         currentInputString += data;
       }
 
-      if (ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ type: "input", data }));
-      } else {
-        apiFetch(`/api/pty/${session.id}/write`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ data }),
-        }).catch(() => {});
-      }
+      sendInput(data);
     });
 
     // Debounced ResizeObserver (50ms) to reduce excessive IPC resize calls
@@ -380,9 +430,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
         try {
           fitAddon.fit();
           const dims = fitAddon.proposeDimensions();
-          if (dims && ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({ type: "resize", cols: dims.cols, rows: dims.rows }));
-          }
+          if (dims) sendResize(dims.cols, dims.rows);
         } catch {}
       }, 50);
     });
@@ -395,7 +443,10 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       if (resizeDebounceTimer) clearTimeout(resizeDebounceTimer);
       onDataDisposable.dispose();
       resizeObserver.disconnect();
-      if (ws.readyState === WebSocket.OPEN) {
+      if (tauriMode) {
+        unlistenPty?.();
+        tauriInvoke("close_pty_session", { sessionId: session.id }).catch(() => {});
+      } else if (ws && ws.readyState === WebSocket.OPEN) {
         ws.close();
       }
       try { webglAddon?.dispose(); } catch {}

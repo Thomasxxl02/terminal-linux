@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
+    "dev:tauri": "vite",
     "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
     "start": "node dist/server.cjs",
     "clean": "rm -rf dist server.js",
@@ -16,6 +17,7 @@
     "@google/genai": "^2.4.0",
     "@monaco-editor/react": "^4.7.0",
     "@tailwindcss/vite": "^4.1.14",
+    "@tauri-apps/api": "^2.11.1",
     "@vitejs/plugin-react": "^5.0.4",
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/addon-search": "^0.16.0",

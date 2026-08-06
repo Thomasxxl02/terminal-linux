@@ -18,6 +18,8 @@ pub struct PtySession {
     pub pair: PtyPair,
     pub writer: Box<dyn Write + Send>,
     pub child: Option<Box<dyn portable_pty::Child + Send + Sync>>,
+    pub cols: u16,
+    pub rows: u16,
 }
 
 impl PtySession {
@@ -59,6 +61,8 @@ impl PtySession {
             pair,
             writer,
             child: Some(child),
+            cols,
+            rows,
         })
     }
 
@@ -157,6 +161,15 @@ impl PtyManager {
     pub fn kill(&self) -> Result<(), String> {
         let mut session = self.session.lock().map_err(|e| e.to_string())?;
         session.kill()
+    }
+
+    /// Retourne les dimensions courantes (cols, rows) de la session.
+    pub fn dimensions(&self) -> (u16, u16) {
+        let session = self.session.lock().map_err(|e| e.to_string()).ok();
+        match session {
+            Some(s) => (s.cols, s.rows),
+            None => (80, 24),
+        }
     }
 }
 

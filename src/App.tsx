@@ -24,6 +24,14 @@ import {
   setAuth,
 } from "./lib/api";
 import { AuthScreen } from "./components/AuthScreen";
+import {
+  closePtySessionWeb,
+  createPtySessionWeb,
+  getSystemStatsWeb,
+  isTauri,
+  listPtySessionsWeb,
+  tauriInvoke,
+} from "./lib/tauri";
 
 
 const MonacoFileEditor = lazy(() =>
@@ -88,6 +96,14 @@ export default function App() {
   // Fetch PTY sessions list from server
   const fetchSessions = useCallback(async () => {
     try {
+      if (isTauri()) {
+        const tauriSessions = await listPtySessionsWeb();
+        setSessions(tauriSessions);
+        if (tauriSessions.length > 0 && !activeSessionId) {
+          setActiveSessionId(tauriSessions[0].id);
+        }
+        return;
+      }
       const res = await apiFetch("/api/pty/sessions");
       if (res.status === 401) {
         // JWT manquant ou expiré → exiger une connexion
@@ -108,9 +124,15 @@ export default function App() {
     }
   }, [activeSessionId]);
 
-  // Au montage : vérifier si le serveur exige un JWT
+  // Au montage : vérifier si le serveur exige un JWT (mode web uniquement).
+  // En mode Tauri, il n'y a pas de serveur HTTP → pas d'authentification.
   useEffect(() => {
     const checkAuth = async () => {
+      if (isTauri()) {
+        setAuthRequired(false);
+        setAuthChecked(true);
+        return;
+      }
       try {
         const res = await apiFetch("/api/pty/sessions");
         if (res.status === 401) {
@@ -145,6 +167,11 @@ export default function App() {
   // Fetch System Statistics
   const fetchSystemStats = useCallback(async () => {
     try {
+      if (isTauri()) {
+        const data = await getSystemStatsWeb();
+        setSystemStats(data as SystemStats);
+        return;
+      }
       const res = await apiFetch("/api/system/stats");
       const data = await res.json();
       setSystemStats(data);
@@ -164,29 +191,56 @@ export default function App() {
     return () => clearInterval(interval);
   }, [fetchSessions, fetchSystemStats]);
 
-  // Create new PTY Session
-  const handleCreateSession = async () => {
+  // Create new PTY Session (Tauri invoke ou API web)
+  const createSession = useCallback(async (options: {
+    name: string;
+    cwd?: string;
+    shell?: string;
+    env?: Record<string, string>;
+  }): Promise<TerminalSessionInfo | null> => {
     try {
-      const sessionCount = sessions.length + 1;
+      if (isTauri()) {
+        const newSess = await createPtySessionWeb(options.name);
+        return newSess;
+      }
       const res = await apiFetch("/api/pty/create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: `Terminal #${sessionCount} - Bash` }),
+        body: JSON.stringify(options),
       });
-      const newSess = await res.json();
-      if (newSess.id) {
-        setSessions((prev) => [...prev, newSess]);
-        setActiveSessionId(newSess.id);
-        setActiveView("terminal");
-      }
+      if (!res.ok) return null;
+      return await res.json();
     } catch (e) {
       console.error("Failed to create session", e);
+      return null;
+    }
+  }, []);
+
+  // Create new PTY Session
+  const handleCreateSession = async () => {
+    const sessionCount = sessions.length + 1;
+    const newSess = await createSession({ name: `Terminal #${sessionCount} - Bash` });
+    if (newSess) {
+      setSessions((prev) => [...prev, newSess]);
+      setActiveSessionId(newSess.id);
+      setActiveView("terminal");
     }
   };
 
   // Close PTY Session
   const handleCloseSession = useCallback(async (id: string) => {
     try {
+      if (isTauri()) {
+        await closePtySessionWeb(id);
+        setSessions((prev) => {
+          const updated = prev.filter((s) => s.id !== id);
+          setActiveSessionId((currentActive) =>
+            currentActive === id ? (updated.length > 0 ? updated[0].id : null) : currentActive
+          );
+          return updated;
+        });
+        return;
+      }
       await apiFetch(`/api/pty/${id}`, { method: "DELETE" });
       setSessions((prev) => {
         const updated = prev.filter((s) => s.id !== id);
@@ -205,12 +259,8 @@ export default function App() {
     let targetId = specificSessionId || activeSessionId;
 
     if (!targetId || !sessions.some((s) => s.id === targetId)) {
-      const res = await apiFetch("/api/pty/create", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: `Terminal Maintenance - Bash` }),
-      });
-      const newSess = await res.json();
+      const newSess = await createSession({ name: `Terminal Maintenance - Bash` });
+      if (!newSess) return;
       targetId = newSess.id;
       setSessions((prev) => [...prev, newSess]);
       setActiveSessionId(targetId);
@@ -219,27 +269,27 @@ export default function App() {
     setActiveView("terminal");
 
     const cmdWithNewline = command.endsWith("\n") ? command : command + "\n";
-    apiFetch(`/api/pty/${targetId}/write`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ data: cmdWithNewline }),
-    }).catch(() => {});
-  }, [activeSessionId, sessions]);
+    if (isTauri()) {
+      tauriInvoke("write_pty_input", { sessionId: targetId, data: cmdWithNewline }).catch(() => {});
+    } else {
+      apiFetch(`/api/pty/${targetId}/write`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ data: cmdWithNewline }),
+      }).catch(() => {});
+    }
+  }, [activeSessionId, sessions, createSession]);
 
   // Launch terminal session with custom profile
   const handleLaunchProfile = useCallback(async (profile: ShellProfile) => {
     try {
-      const res = await apiFetch("/api/pty/create", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: profile.name,
-          cwd: profile.cwd,
-          shell: profile.shell,
-          env: profile.env,
-        }),
+      const newSess = await createSession({
+        name: profile.name,
+        cwd: profile.cwd,
+        shell: profile.shell,
+        env: profile.env,
       });
-      const newSess = await res.json();
+      if (!newSess) return;
       setSessions((prev) => [...prev, newSess]);
       setActiveSessionId(newSess.id);
       setActiveView("terminal");
@@ -252,22 +302,18 @@ export default function App() {
     } catch (err) {
       console.error("Failed to launch profile session:", err);
     }
-  }, [handleExecuteInTerminal]);
+  }, [handleExecuteInTerminal, createSession]);
 
   // Restore saved tab sessions
   const handleRestoreSavedTabs = useCallback(async (savedTabs: SavedTabSession[]) => {
     for (const tab of savedTabs) {
       try {
-        const res = await apiFetch("/api/pty/create", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            name: tab.name,
-            cwd: tab.cwd,
-            shell: tab.shell,
-          }),
+        const newSess = await createSession({
+          name: tab.name,
+          cwd: tab.cwd,
+          shell: tab.shell,
         });
-        const newSess = await res.json();
+        if (!newSess) continue;
         setSessions((prev) => [...prev.filter((s) => s.id !== newSess.id), newSess]);
         setActiveSessionId(newSess.id);
       } catch (e) {
@@ -275,7 +321,7 @@ export default function App() {
       }
     }
     setActiveView("terminal");
-  }, []);
+  }, [createSession]);
 
   // Launch SSH Session in new PTY tab
   const handleLaunchSshSession = useCallback(async (host: SshHost) => {
@@ -290,29 +336,23 @@ export default function App() {
     cmd += `${host.username}@${host.host}`;
 
     try {
-      const res = await apiFetch("/api/pty/create", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: `SSH: ${host.name}`,
-          shell: "bash",
-          cwd: "~",
-        }),
+      const newSess = await createSession({
+        name: `SSH: ${host.name}`,
+        shell: "bash",
+        cwd: "~",
       });
-      const data = await res.json();
-      if (data.session) {
-        setSessions((prev) => [...prev, data.session]);
-        setActiveSessionId(data.session.id);
-        setActiveView("terminal");
+      if (!newSess) return;
+      setSessions((prev) => [...prev, newSess]);
+      setActiveSessionId(newSess.id);
+      setActiveView("terminal");
 
-        setTimeout(() => {
-          handleExecuteInTerminal(cmd, data.session.id);
-        }, 600);
-      }
+      setTimeout(() => {
+        handleExecuteInTerminal(cmd, newSess.id);
+      }, 600);
     } catch (e) {
       console.error("Failed to launch SSH session", e);
     }
-  }, [handleExecuteInTerminal]);
+  }, [handleExecuteInTerminal, createSession]);
 
   // Open File into Monaco Editor from Terminal Explorer
   const handleOpenMonacoFile = useCallback((filePath: string) => {

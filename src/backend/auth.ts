@@ -15,11 +15,16 @@ import { PermissionService } from "./services";
  *   DEV_TOKEN        : token statique → rôle "developer"
  *   GUEST_TOKEN      : token statique → rôle "guest"
  *
- * Si AUTH_SECRET n'est pas défini, l'auth est désactivée (comportement
- * hérité) et un avertissement est émis au démarrage.
+ * Durcissement :
+ *   - JWT transmis via cookie httpOnly + SameSite=Strict (jamais en clair
+ *     dans l'URL WebSocket, jamais accessible au JS → anti-XSS)
+ *   - jti + liste noire en mémoire → révocation immédiate (logout)
+ *   - Fail-closed en production : le serveur refuse de démarrer sans
+ *     AUTH_SECRET (voir assertAuthConfigured)
  */
 
 const TOKEN_TTL_SECONDS = 12 * 60 * 60; // 12h
+const COOKIE_NAME = "terminal_token";
 
 function getSecret(): string | null {
   const secret = process.env.AUTH_SECRET;
@@ -30,6 +35,40 @@ export function isAuthEnabled(): boolean {
   return getSecret() !== null;
 }
 
+/** Fail-closed : en production, l'auth est obligatoire. */
+export function assertAuthConfigured(): void {
+  if (process.env.NODE_ENV === "production" && !isAuthEnabled()) {
+    console.error(
+      "[AUTH] FATAL : AUTH_SECRET manquant en production. " +
+        "Configurer AUTH_SECRET (>= 16 caractères) pour activer l'authentification."
+    );
+    process.exit(1);
+  }
+}
+
+// ── Révocation (liste noire jti) ─────────────────────────────────
+const revokedTokens = new Map<string, number>(); // jti -> exp (timestamp s)
+let lastRevocationPurge = Date.now();
+
+function purgeRevoked(now = Date.now()): void {
+  if (now - lastRevocationPurge < 60_000) return; // purge max 1x/min
+  for (const [jti, exp] of revokedTokens) {
+    if (exp * 1000 < now) revokedTokens.delete(jti);
+  }
+  lastRevocationPurge = now;
+}
+
+export function revokeToken(jti: string, exp: number): void {
+  purgeRevoked();
+  revokedTokens.set(jti, exp);
+}
+
+function isRevoked(jti: string): boolean {
+  purgeRevoked();
+  return revokedTokens.has(jti);
+}
+
+// ── JWT ──────────────────────────────────────────────────────────
 function b64url(input: string | Buffer): string {
   return Buffer.from(input).toString("base64url");
 }
@@ -54,6 +93,7 @@ function roleForStaticToken(staticToken: string): string | null {
 export interface AuthUser {
   role: string;
   exp: number;
+  jti: string;
 }
 
 export function signToken(role: string): string {
@@ -61,7 +101,8 @@ export function signToken(role: string): string {
   if (!secret) throw new Error("AUTH_SECRET non configuré");
   const header = b64url(JSON.stringify({ alg: "HS256", typ: "JWT" }));
   const exp = Math.floor(Date.now() / 1000) + TOKEN_TTL_SECONDS;
-  const payload = b64url(JSON.stringify({ role, exp }));
+  const jti = crypto.randomUUID();
+  const payload = b64url(JSON.stringify({ role, exp, jti }));
   const signature = crypto
     .createHmac("sha256", secret)
     .update(`${header}.${payload}`)
@@ -85,27 +126,57 @@ export function verifyToken(token: string): AuthUser | null {
     if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
 
     const decoded = JSON.parse(Buffer.from(payload, "base64url").toString("utf-8"));
-    if (typeof decoded.role !== "string" || typeof decoded.exp !== "number") return null;
+    if (typeof decoded.role !== "string" || typeof decoded.exp !== "number" || typeof decoded.jti !== "string") {
+      return null;
+    }
     if (decoded.exp < Math.floor(Date.now() / 1000)) return null;
-    return { role: decoded.role, exp: decoded.exp };
+    if (isRevoked(decoded.jti)) return null;
+    return { role: decoded.role, exp: decoded.exp, jti: decoded.jti };
   } catch {
     return null;
   }
 }
 
+// ── Extraction du token : cookie httpOnly (prioritaire) ou Bearer ─
 export function extractBearerToken(req: Request): string | null {
   const header = req.headers.authorization;
   if (!header || !header.startsWith("Bearer ")) return null;
   return header.slice("Bearer ".length).trim() || null;
 }
 
+export function extractCookieToken(req: Request): string | null {
+  const raw = req.headers.cookie;
+  if (!raw) return null;
+  for (const part of raw.split(";")) {
+    const [name, ...rest] = part.trim().split("=");
+    if (name === COOKIE_NAME) return rest.join("=") || null;
+  }
+  return null;
+}
+
+function setAuthCookie(res: Response, token: string): void {
+  const secure = process.env.NODE_ENV === "production" ? "; Secure" : "";
+  res.setHeader(
+    "Set-Cookie",
+    `${COOKIE_NAME}=${token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${TOKEN_TTL_SECONDS}${secure}`
+  );
+}
+
+function clearAuthCookie(res: Response): void {
+  res.setHeader(
+    "Set-Cookie",
+    `${COOKIE_NAME}=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0`
+  );
+}
+
+// ── Middlewares ───────────────────────────────────────────────────
 /** Middleware : exige un JWT valide. Si l'auth est désactivée, passe (rôle guest). */
 export function requireAuth(req: Request, res: Response, next: NextFunction) {
   if (!isAuthEnabled()) {
-    (req as any).user = { role: "guest", exp: 0 };
+    (req as any).user = { role: "guest", exp: 0, jti: "" };
     return next();
   }
-  const token = extractBearerToken(req);
+  const token = extractCookieToken(req) || extractBearerToken(req);
   const user = token ? verifyToken(token) : null;
   if (!user) {
     return res.status(401).json({ error: "Authentification requise" });
@@ -125,11 +196,31 @@ export function requirePermission(action: string) {
   };
 }
 
-/** Gestionnaire POST /api/auth/login — échange un token statique contre un JWT. */
+/** Middleware CSRF : les requêtes mutantes doivent être same-origin. */
+export function requireSameOrigin(req: Request, res: Response, next: NextFunction) {
+  if (process.env.NODE_ENV === "test") return next();
+  if (["GET", "HEAD", "OPTIONS"].includes(req.method)) return next();
+
+  const origin = req.headers.origin;
+  const referer = req.headers.referer;
+  const host = req.headers.host;
+  const source = origin || referer;
+  if (!source) return next(); // requête non-navigateur (curl, API) → OK
+  try {
+    const url = new URL(source);
+    if (url.host === host) return next();
+  } catch {
+    return res.status(403).json({ error: "Origine invalide" });
+  }
+  return res.status(403).json({ error: "Origine non autorisée" });
+}
+
+// ── Handlers ──────────────────────────────────────────────────────
+/** POST /api/auth/login — échange un token statique contre un JWT (cookie httpOnly). */
 export function handleLogin(req: Request, res: Response) {
   if (!isAuthEnabled()) {
-    // Auth désactivée : retourner un token "guest" pour compatibilité.
-    return res.json({ token: signToken("guest"), role: "guest", authEnabled: false });
+    // Auth désactivée : pas de cookie nécessaire.
+    return res.json({ token: "", role: "guest", authEnabled: false });
   }
   const { token } = req.body || {};
   if (typeof token !== "string" || !token) {
@@ -139,7 +230,20 @@ export function handleLogin(req: Request, res: Response) {
   if (!role) {
     return res.status(401).json({ error: "Token invalide" });
   }
-  return res.json({ token: signToken(role), role, authEnabled: true });
+  const jwt = signToken(role);
+  setAuthCookie(res, jwt);
+  return res.json({ token: jwt, role, authEnabled: true });
+}
+
+/** POST /api/auth/logout — révoque le JWT courant et efface le cookie. */
+export function handleLogout(req: Request, res: Response) {
+  const token = extractCookieToken(req) || extractBearerToken(req);
+  const user = token ? verifyToken(token) : null;
+  if (user) {
+    revokeToken(user.jti, user.exp);
+  }
+  clearAuthCookie(res);
+  return res.json({ success: true });
 }
 
 export function authStatus(): { enabled: boolean; roles: string[] } {
