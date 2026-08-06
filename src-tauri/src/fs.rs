@@ -218,3 +218,62 @@ pub fn check_port(port: u16) -> Result<bool, String> {
         Err(_) => Ok(false), // occupé
     }
 }
+
+/// Vérifie la présence RÉELLE des shells sur le système (audit de compatibilité).
+/// Retourne pour chaque shell : présent ou non + version détectée.
+#[tauri::command]
+pub fn check_shells() -> Result<Vec<serde_json::Value>, String> {
+    use std::process::Command;
+
+    let candidates: Vec<(&str, &str)> = vec![
+        ("bash", "/bin/bash"),
+        ("bash", "/usr/bin/bash"),
+        ("zsh", "/bin/zsh"),
+        ("zsh", "/usr/bin/zsh"),
+        ("sh", "/bin/sh"),
+        ("dash", "/bin/dash"),
+        ("fish", "/usr/bin/fish"),
+        ("ksh", "/bin/ksh"),
+    ];
+
+    let mut results: Vec<serde_json::Value> = Vec::new();
+    let mut seen: Vec<String> = Vec::new();
+
+    for (name, path) in candidates {
+        if seen.contains(&name.to_string()) {
+            continue; // déjà trouvé via un autre chemin
+        }
+        let present = PathBuf::from(path).exists();
+        let version = if present {
+            Command::new(path)
+                .arg("--version")
+                .output()
+                .ok()
+                .map(|o| {
+                    let stdout = String::from_utf8_lossy(&o.stdout);
+                    let stderr = String::from_utf8_lossy(&o.stderr);
+                    let raw = format!("{}{}", stdout, stderr);
+                    raw.lines().next().unwrap_or("").trim().to_string()
+                })
+                .unwrap_or_default()
+        } else {
+            String::new()
+        };
+        if present {
+            seen.push(name.to_string());
+        }
+        results.push(serde_json::json!({
+            "name": name,
+            "path": path,
+            "present": present,
+            "version": version,
+        }));
+    }
+
+    // TERM / COLORTERM réels
+    let term = std::env::var("TERM").unwrap_or_else(|_| "non défini".to_string());
+    let colorterm = std::env::var("COLORTERM").unwrap_or_else(|_| "non défini".to_string());
+    results.push(serde_json::json!({ "name": "env", "path": "", "present": true, "version": format!("TERM={} COLORTERM={}", term, colorterm) }));
+
+    Ok(results)
+}

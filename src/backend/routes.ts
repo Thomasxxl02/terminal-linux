@@ -692,6 +692,47 @@ router.get("/network/port-check", (req, res) => {
   });
 });
 
+// 6c. Audit RÉEL des shells présents sur le système (compatibilité)
+router.get("/shells/check", (req, res) => {
+  const candidates: { name: string; path: string }[] = [
+    { name: "bash", path: "/bin/bash" },
+    { name: "bash", path: "/usr/bin/bash" },
+    { name: "zsh", path: "/bin/zsh" },
+    { name: "zsh", path: "/usr/bin/zsh" },
+    { name: "sh", path: "/bin/sh" },
+    { name: "dash", path: "/bin/dash" },
+    { name: "fish", path: "/usr/bin/fish" },
+    { name: "ksh", path: "/bin/ksh" },
+  ];
+
+  const results: { name: string; path: string; present: boolean; version: string }[] = [];
+  const seen = new Set<string>();
+  for (const { name, path: p } of candidates) {
+    if (seen.has(name)) continue;
+    const present = fs.existsSync(p);
+    let version = "";
+    if (present) {
+      try {
+        const out = require("child_process").execSync(`"${p}" --version 2>&1 || true`, { encoding: "utf-8" });
+        version = (out || "").split("\n")[0]?.trim() || "";
+      } catch {
+        version = "";
+      }
+      seen.add(name);
+    }
+    results.push({ name, path: p, present, version });
+  }
+
+  results.push({
+    name: "env",
+    path: "",
+    present: true,
+    version: `TERM=${process.env.TERM || "non défini"} COLORTERM=${process.env.COLORTERM || "non défini"}`,
+  });
+
+  res.json({ shells: results });
+});
+
 // 7. Tauri Architecture Provider
 router.get("/tauri/source", (req, res) => {
   // Lit les VRAIS fichiers source Rust du projet (pas de placeholders)

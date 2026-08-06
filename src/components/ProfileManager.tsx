@@ -20,6 +20,8 @@ import {
 } from "lucide-react";
 import { ShellProfile, SavedTabSession, TerminalSessionInfo } from "../types";
 import { useSecureStorage } from "../hooks/useSecureStorage";
+import { apiFetch } from "../lib/api";
+import { isTauri, tauriInvoke } from "../lib/tauri";
 import { Tooltip } from "./Tooltip";
 import { ConfirmationModal } from "./ConfirmationModal";
 
@@ -242,40 +244,55 @@ export const ProfileManager: React.FC<ProfileManagerProps> = ({
     setTimeout(() => setSuccessBanner(null), 3000);
   };
 
-  // Run shell audit simulator
-  const handleRunShellAudit = () => {
+  // Audit RÉEL des shells : vérifie l'existence + version sur le système
+  // (commande Rust check_shells en Tauri, route /api/shells/check en web).
+  const handleRunShellAudit = async () => {
     setIsCheckingShells(true);
     setShellValidationLogs([]);
     setShowValidator(true);
 
-    const logs = [
-      "[SYS] Lancement de l'audit d'intégrité des terminaux...",
-      "[AUDIT] Recherche des binaires de shells présents dans l'environnement standard...",
-      "[CHECK] Recherche de '/bin/bash'...",
-      "[SUCCESS] '/bin/bash' trouvé. Version: 5.2.15-release. Statut: COMPATIBLE.",
-      "[CHECK] Recherche de '/bin/zsh'...",
-      "[SUCCESS] '/bin/zsh' trouvé. Version: 5.9-stable. Statut: COMPATIBLE.",
-      "[CHECK] Recherche de 'fish' shell...",
-      "[WARN] 'fish' non détecté à l'emplacement par défaut. Recommandation: Installer via 'sudo apt install fish'.",
-      "[CHECK] Recherche de '/bin/sh' minimaliste...",
-      "[SUCCESS] '/bin/sh' trouvé. Type: Dash POSIX. Statut: COMPATIBLE.",
-      "[ENV] Inspection des variables d'environnement critiques...",
-      "[INFO] Variable 'TERM' configurée sur 'xterm-256color'. Prise en charge des graphismes WebGL active.",
-      "[INFO] Variable 'COLORTERM' configurée sur 'truecolor'. Rendu de couleurs 24-bits activé.",
-      "[AUDIT] Évaluation de la sécurité : Pas de faille sudo sans mot de passe détectée sur la configuration actuelle.",
-      "[SUCCESS] Rapport final : 3 shells prêts, support TrueColor validé ! Aucun conflit d'environnement détecté."
-    ];
-
-    let currentLog = 0;
-    const interval = setInterval(() => {
-      if (currentLog < logs.length) {
-        setShellValidationLogs((prev) => [...prev, logs[currentLog]]);
-        currentLog++;
+    try {
+      let shells: { name: string; path: string; present: boolean; version: string }[];
+      if (isTauri()) {
+        shells = await tauriInvoke("check_shells");
       } else {
-        clearInterval(interval);
-        setIsCheckingShells(false);
+        const res = await apiFetch("/api/shells/check");
+        const data = await res.json();
+        shells = data.shells;
       }
-    }, 400);
+
+      const logs: string[] = [
+        "[SYS] Audit d'intégrité des terminaux (vérification réelle)...",
+      ];
+      for (const s of shells) {
+        if (s.name === "env") {
+          logs.push(`[ENV] ${s.version}`);
+          continue;
+        }
+        if (s.present) {
+          logs.push(`[CHECK] '${s.path}' présent — ${s.version || "version inconnue"}`);
+        } else {
+          logs.push(`[WARN] '${s.path}' non détecté. Installation: sudo apt install ${s.name}`);
+        }
+      }
+      const presentCount = shells.filter((s) => s.present && s.name !== "env").length;
+      logs.push(`[RAPPORT] ${presentCount} shells détectés sur le système.`);
+
+      let currentLog = 0;
+      const interval = setInterval(() => {
+        if (currentLog < logs.length) {
+          setShellValidationLogs((prev) => [...prev, logs[currentLog]]);
+          currentLog++;
+        } else {
+          clearInterval(interval);
+          setIsCheckingShells(false);
+        }
+      }, 250);
+    } catch (e) {
+      console.error("Failed to run shell audit", e);
+      setShellValidationLogs(["Erreur lors de l'audit des shells."]);
+      setIsCheckingShells(false);
+    }
   };
 
   return (
