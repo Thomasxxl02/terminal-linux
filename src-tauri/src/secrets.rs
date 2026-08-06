@@ -39,21 +39,77 @@ pub async fn secure_delete(key: String) -> Result<(), String> {
     }
 }
 
-/// Lit les VRAIS fichiers source Rust du backend (affichage dans le panneau
-/// "Architecture Rust"). Retourne le contenu brut, vide si le fichier manque.
+/// Lit les VRAIS fichiers source du projet selon le groupe demandé
+/// (affichage dans le panneau "Architectures"). Retourne un objet
+/// { clé: contenu } — contenu vide si le fichier manque.
+/// Groupes : "rust", "backend", "frontend", "config".
 #[tauri::command]
-pub fn get_source_code() -> Result<serde_json::Value, String> {
-    let src_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src");
-    let read = |f: &str| std::fs::read_to_string(src_dir.join(f)).unwrap_or_default();
-    let conf_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let read_conf = |f: &str| std::fs::read_to_string(conf_dir.join(f)).unwrap_or_default();
+pub fn get_source_code(group: String) -> Result<serde_json::Value, String> {
+    let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR")); // src-tauri/
+    let project_root = manifest
+        .parent()
+        .map(|p| p.to_path_buf())
+        .unwrap_or_else(|| manifest.clone());
+    let read = |p: &std::path::Path| std::fs::read_to_string(p).unwrap_or_default();
+    let mut out = serde_json::Map::new();
 
-    Ok(serde_json::json!({
-        "cargoToml": read_conf("Cargo.toml"),
-        "mainRs": read("main.rs"),
-        "ptyRs": read("pty.rs"),
-        "commandsRs": read("commands.rs"),
-        "secretsRs": read("secrets.rs"),
-        "tauriConfJson": read_conf("tauri.conf.json"),
-    }))
+    let insert = |out: &mut serde_json::Map<String, serde_json::Value>, key: &str, path: std::path::PathBuf| {
+        out.insert(key.to_string(), serde_json::Value::String(read(&path)));
+    };
+
+    match group.as_str() {
+        "rust" => {
+            let src = manifest.join("src");
+            insert(&mut out, "mainRs", src.join("main.rs"));
+            insert(&mut out, "ptyRs", src.join("pty.rs"));
+            insert(&mut out, "commandsRs", src.join("commands.rs"));
+            insert(&mut out, "secretsRs", src.join("secrets.rs"));
+            insert(&mut out, "fsRs", src.join("fs.rs"));
+            insert(&mut out, "cargoToml", manifest.join("Cargo.toml"));
+            insert(&mut out, "tauriConfJson", manifest.join("tauri.conf.json"));
+        }
+        "backend" => {
+            let backend = project_root.join("src").join("backend");
+            insert(&mut out, "serverTs", project_root.join("server.ts"));
+            insert(&mut out, "routesTs", backend.join("routes.ts"));
+            insert(&mut out, "authTs", backend.join("auth.ts"));
+            insert(&mut out, "servicesTs", backend.join("services.ts"));
+            insert(&mut out, "syncTs", backend.join("sync.ts"));
+            insert(&mut out, "securityTs", backend.join("security.ts"));
+            insert(&mut out, "dbTs", backend.join("db.ts"));
+        }
+        "frontend" => {
+            let src = project_root.join("src");
+            insert(&mut out, "appTsx", src.join("App.tsx"));
+            insert(&mut out, "mainTsx", src.join("main.tsx"));
+            insert(&mut out, "apiTs", src.join("lib").join("api.ts"));
+            insert(&mut out, "tauriTs", src.join("lib").join("tauri.ts"));
+            insert(&mut out, "fsApiTs", src.join("lib").join("fsApi.ts"));
+            insert(&mut out, "secureStorageTs", src.join("lib").join("secureStorage.ts"));
+            insert(&mut out, "typesTs", src.join("types.ts"));
+        }
+        "config" => {
+            insert(&mut out, "packageJson", project_root.join("package.json"));
+            insert(&mut out, "viteConfigTs", project_root.join("vite.config.ts"));
+            insert(&mut out, "tsconfigJson", project_root.join("tsconfig.json"));
+            insert(&mut out, "rustYml", project_root.join(".github").join("workflows").join("rust.yml"));
+            insert(&mut out, "webpackYml", project_root.join(".github").join("workflows").join("webpack.yml"));
+        }
+        "python" => {
+            let py = project_root.join("scripts").join("python");
+            insert(&mut out, "systemHealthPy", py.join("system_health.py"));
+            insert(&mut out, "diskUsagePy", py.join("disk_usage.py"));
+        }
+        "css" => {
+            insert(&mut out, "indexCss", project_root.join("src").join("index.css"));
+            insert(&mut out, "indexHtml", project_root.join("index.html"));
+        }
+        "markdown" => {
+            insert(&mut out, "readmeMd", project_root.join("README.md"));
+            insert(&mut out, "securityMd", project_root.join("SECURITY.md"));
+        }
+        _ => return Err(format!("Groupe inconnu : {}", group)),
+    }
+
+    Ok(serde_json::Value::Object(out))
 }

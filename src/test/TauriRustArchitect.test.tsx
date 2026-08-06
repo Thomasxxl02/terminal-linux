@@ -31,12 +31,35 @@ describe("TauriRustArchitect Component", () => {
     });
   });
 
-  it("renders the Rust architecture page with title", async () => {
+  it("renders the architecture page with title", async () => {
     await act(async () => {
       render(<TauriRustArchitect />);
     });
 
-    expect(screen.getByText(/Architecture Rust du backend Tauri/i)).toBeInTheDocument();
+    expect(screen.getByText(/Architectures du projet/i)).toBeInTheDocument();
+    // Onglets par langage visibles
+    expect(screen.getByText("Rust · Tauri")).toBeInTheDocument();
+    expect(screen.getByText("TypeScript · Express")).toBeInTheDocument();
+    expect(screen.getByText("React · TypeScript")).toBeInTheDocument();
+    expect(screen.getByText("Config · CI")).toBeInTheDocument();
+    expect(screen.getByText("Python · Scripts")).toBeInTheDocument();
+    expect(screen.getByText("CSS · Tailwind")).toBeInTheDocument();
+    expect(screen.getByText("Markdown · Docs")).toBeInTheDocument();
+  });
+
+  it("switches to the Python tab and shows real script files", async () => {
+    await act(async () => {
+      render(<TauriRustArchitect />);
+    });
+
+    const pythonTab = screen.getByText("Python · Scripts");
+    await act(async () => {
+      fireEvent.click(pythonTab);
+    });
+
+    // Les scripts Python réels sont listés comme fichiers
+    expect(screen.getByText("system_health.py")).toBeInTheDocument();
+    expect(screen.getByText("disk_usage.py")).toBeInTheDocument();
   });
 
   it("lists the real registered Tauri commands", async () => {

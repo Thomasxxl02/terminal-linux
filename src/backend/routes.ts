@@ -735,30 +735,67 @@ router.get("/shells/check", (req, res) => {
 
 // 7. Tauri Architecture Provider
 router.get("/tauri/source", (req, res) => {
-  // Lit les VRAIS fichiers source Rust du projet (pas de placeholders)
-  const srcDir = path.join(process.cwd(), "src-tauri", "src");
-  const readRs = (f: string) => {
+  // Lit les VRAIS fichiers source du projet selon le groupe demandé
+  // (?group=rust|backend|frontend|config). Pas de placeholders.
+  const root = process.cwd();
+  const readFile = (p: string) => {
     try {
-      return fs.readFileSync(path.join(srcDir, f), "utf-8");
+      return fs.readFileSync(p, "utf-8");
     } catch {
       return "";
     }
   };
-  const readConf = (f: string) => {
-    try {
-      return fs.readFileSync(path.join(process.cwd(), "src-tauri", f), "utf-8");
-    } catch {
-      return "";
-    }
-  };
-  res.json({
-    cargoToml: readConf("Cargo.toml"),
-    mainRs: readRs("main.rs"),
-    ptyRs: readRs("pty.rs"),
-    commandsRs: readRs("commands.rs"),
-    secretsRs: readRs("secrets.rs"),
-    tauriConfJson: readConf("tauri.conf.json"),
-  });
+  const group = typeof req.query.group === "string" ? req.query.group : "rust";
+
+  const result: Record<string, string> = {};
+  if (group === "rust") {
+    const src = path.join(root, "src-tauri", "src");
+    result.cargoToml = readFile(path.join(root, "src-tauri", "Cargo.toml"));
+    result.mainRs = readFile(path.join(src, "main.rs"));
+    result.ptyRs = readFile(path.join(src, "pty.rs"));
+    result.commandsRs = readFile(path.join(src, "commands.rs"));
+    result.secretsRs = readFile(path.join(src, "secrets.rs"));
+    result.fsRs = readFile(path.join(src, "fs.rs"));
+    result.tauriConfJson = readFile(path.join(root, "src-tauri", "tauri.conf.json"));
+  } else if (group === "backend") {
+    const backend = path.join(root, "src", "backend");
+    result.serverTs = readFile(path.join(root, "server.ts"));
+    result.routesTs = readFile(path.join(backend, "routes.ts"));
+    result.authTs = readFile(path.join(backend, "auth.ts"));
+    result.servicesTs = readFile(path.join(backend, "services.ts"));
+    result.syncTs = readFile(path.join(backend, "sync.ts"));
+    result.securityTs = readFile(path.join(backend, "security.ts"));
+    result.dbTs = readFile(path.join(backend, "db.ts"));
+  } else if (group === "frontend") {
+    const src = path.join(root, "src");
+    result.appTsx = readFile(path.join(src, "App.tsx"));
+    result.mainTsx = readFile(path.join(src, "main.tsx"));
+    result.apiTs = readFile(path.join(src, "lib", "api.ts"));
+    result.tauriTs = readFile(path.join(src, "lib", "tauri.ts"));
+    result.fsApiTs = readFile(path.join(src, "lib", "fsApi.ts"));
+    result.secureStorageTs = readFile(path.join(src, "lib", "secureStorage.ts"));
+    result.typesTs = readFile(path.join(src, "types.ts"));
+  } else if (group === "config") {
+    result.packageJson = readFile(path.join(root, "package.json"));
+    result.viteConfigTs = readFile(path.join(root, "vite.config.ts"));
+    result.tsconfigJson = readFile(path.join(root, "tsconfig.json"));
+    result.rustYml = readFile(path.join(root, ".github", "workflows", "rust.yml"));
+    result.webpackYml = readFile(path.join(root, ".github", "workflows", "webpack.yml"));
+  } else if (group === "python") {
+    const py = path.join(root, "scripts", "python");
+    result.systemHealthPy = readFile(path.join(py, "system_health.py"));
+    result.diskUsagePy = readFile(path.join(py, "disk_usage.py"));
+  } else if (group === "css") {
+    result.indexCss = readFile(path.join(root, "src", "index.css"));
+    result.indexHtml = readFile(path.join(root, "index.html"));
+  } else if (group === "markdown") {
+    result.readmeMd = readFile(path.join(root, "README.md"));
+    result.securityMd = readFile(path.join(root, "SECURITY.md"));
+  } else {
+    return res.status(400).json({ error: `Groupe inconnu : ${group}` });
+  }
+
+  res.json(result);
 });
 
 export default router;
