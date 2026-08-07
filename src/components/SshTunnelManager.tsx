@@ -212,32 +212,45 @@ export const SshTunnelManager: React.FC<SshTunnelManagerProps> = ({
     handleToggleTunnelStatus(t.id);
   };
 
-  // Diagnostic simulé — les logs affichent clairement qu'aucun test réel
-  // n'est exécuté (pas de connexion SSH réelle derrière ce panneau).
-  const handleRunDiagnostic = (t: SshTunnel) => {
+  // Diagnostic RÉEL : vérifie si le port local du tunnel écoute (bind
+  // test via check_port — Tauri et web) et affiche uniquement des faits.
+  // La latence n'est pas mesurable sans session SSH active → jamais inventée.
+  const handleRunDiagnostic = async (t: SshTunnel) => {
     setDiagnosticTunnelId(t.id);
     setDiagnosticLogs([]);
     setIsDiagnosing(true);
 
-    const logs = [
-      `[DIAG] Simulation de diagnostic pour: ${t.name}`,
-      `[INFO] Ce panneau ne se connecte à aucun serveur.`,
-      `[SIMULATION] Résolution DNS simulée... OK (aucun paquet envoyé)`,
-      `[SIMULATION] Vérification du port local ${t.localPort}... voir l'outil de port-check ci-dessous (test réel)`,
-      `[SIMULATION] Latence estimée: n/d (aucune mesure réelle)`,
-      `[FIN] Pour tester réellement ce tunnel, exécutez la commande dans le terminal.`
-    ];
+    const push = (line: string) => setDiagnosticLogs((prev) => [...prev, line]);
+    push(`[DIAG] Diagnostic réel du tunnel: ${t.name}`);
+    push(`[INFO] Tunnel local ${t.localPort} → ${t.remoteHost}:${t.remotePort}`);
 
-    let index = 0;
-    const interval = setInterval(() => {
-      if (index < logs.length) {
-        setDiagnosticLogs((prev) => [...prev, logs[index]]);
-        index++;
+    let available: boolean;
+    try {
+      if (isTauri()) {
+        available = await tauriInvoke<boolean>("check_port", { port: t.localPort });
       } else {
-        clearInterval(interval);
-        setIsDiagnosing(false);
+        const res = await apiFetch(`/api/network/port-check?port=${t.localPort}`);
+        const data = await res.json();
+        available = data.available;
       }
-    }, 400);
+    } catch {
+      push(`[ERREUR] Impossible de vérifier le port ${t.localPort} (API indisponible).`);
+      setIsDiagnosing(false);
+      return;
+    }
+
+    if (available) {
+      push(
+        `[RÉEL] Port local ${t.localPort}: LIBRE — aucun tunnel actif. Exécutez la commande dans le terminal pour lancer le tunnel.`
+      );
+    } else {
+      push(
+        `[RÉEL] Port local ${t.localPort}: OCCUPÉ — un processus écoute (tunnel actif probable).`
+      );
+    }
+    push(`[RÉEL] Latence : non mesurable sans session SSH active (aucune donnée inventée).`);
+    push(`[FIN] Test de bout en bout : exécutez la commande du tunnel dans le terminal.`);
+    setIsDiagnosing(false);
   };
 
   // Vérification RÉELLE d'un port local : bind test (Tauri) ou route
@@ -306,7 +319,7 @@ export const SshTunnelManager: React.FC<SshTunnelManagerProps> = ({
             </h2>
           </div>
           <p className="text-xs text-slate-400">
-            Créez des redirections de ports locales (-L), distantes (-R) ou des serveurs proxy SOCKS5 dynamiques (-D) avec diagnostic de bande passante intégré.
+            Créez des redirections de ports locales (-L), distantes (-R) ou des serveurs proxy SOCKS5 dynamiques (-D) avec vérification réelle du port local.
           </p>
         </div>
 
@@ -425,7 +438,7 @@ export const SshTunnelManager: React.FC<SshTunnelManagerProps> = ({
                 </div>
               ) : (
                 <div className="my-2 p-1 text-center font-mono text-[10px] text-slate-600 italic">
-                  Activer le tunnel pour démarrer le monitoring d'échange de bande passante.
+                  Lancez la commande du tunnel dans le terminal pour l'activer (aucune mesure de trafic locale).
                 </div>
               )}
 
@@ -520,7 +533,7 @@ export const SshTunnelManager: React.FC<SshTunnelManagerProps> = ({
                     </div>
                   ))}
                   {isDiagnosing && (
-                    <div className="text-slate-500 animate-pulse">Test de poignée de main TCP en cours...</div>
+                    <div className="text-slate-500 animate-pulse">Vérification du port local en cours...</div>
                   )}
                 </>
               ) : (

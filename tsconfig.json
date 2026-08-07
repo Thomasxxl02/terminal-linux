@@ -24,5 +24,7 @@
     },
     "allowImportingTsExtensions": true,
     "noEmit": true
-  }
+  },
+  "include": ["src", "tests", "server.ts", "vite.config.ts", "playwright.config.ts"],
+  "exclude": ["src-tauri", "dist", "node_modules", "public"]
 }
