@@ -3,6 +3,9 @@ import { render, screen, fireEvent, act, waitFor } from "@testing-library/react"
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ProfileManager } from "../components/ProfileManager";
 
+// Référence partagée pour vérifier les appels de setValue depuis les tests
+const { mockSetValue } = vi.hoisted(() => ({ mockSetValue: vi.fn() }));
+
 // Mock du stockage sécurisé : valeurs synchrones pré-remplies
 vi.mock("../hooks/useSecureStorage", () => ({
   useSecureStorage: (key: string, initial: unknown) => {
@@ -19,7 +22,7 @@ vi.mock("../hooks/useSecureStorage", () => ({
           },
         ],
         loading: false,
-        setValue: vi.fn(),
+        setValue: mockSetValue,
         remove: vi.fn(),
       };
     }
@@ -119,5 +122,60 @@ describe("ProfileManager Component", () => {
     });
 
     expect(screen.getByText("Erreur lors de l'audit des shells.")).toBeInTheDocument();
+  });
+
+  it("opens the edit modal pre-filled with the profile values", async () => {
+    await act(async () => {
+      render(<ProfileManager {...defaultProps} />);
+    });
+
+    const editBtn = await screen.findByRole("button", { name: /Éditer le profil Bash Standard/i });
+    await act(async () => {
+      fireEvent.click(editBtn);
+    });
+
+    // Le formulaire d'édition est pré-rempli (nom du profil dans le champ)
+    const nameField = await screen.findByPlaceholderText(/Ex: Python Data Science/i);
+    expect(nameField).toHaveValue("Bash Standard (Dev)");
+    // Le select du shell est présent
+    expect(screen.getAllByRole("combobox").length).toBeGreaterThan(0);
+  });
+
+  it("deletes a profile after confirmation (non-default only)", async () => {
+    await act(async () => {
+      render(<ProfileManager {...defaultProps} />);
+    });
+
+    const deleteBtn = await screen.findByRole("button", { name: /Supprimer le profil Bash Standard/i });
+    await act(async () => {
+      fireEvent.click(deleteBtn);
+    });
+
+    // Confirmation demandée puis validée
+    expect(screen.getByText(/Supprimer le Profil Shell/i)).toBeInTheDocument();
+    await act(async () => {
+      fireEvent.click(screen.getByText("Supprimer"));
+    });
+
+    expect(mockSetValue).toHaveBeenCalled();
+    // Le modal de confirmation est refermé
+    expect(screen.queryByText(/Supprimer le Profil Shell/i)).not.toBeInTheDocument();
+  });
+
+  it("closes the create modal without saving", async () => {
+    await act(async () => {
+      render(<ProfileManager {...defaultProps} />);
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByText("Créer un Profil"));
+    });
+    expect(screen.getByPlaceholderText(/Ex: Python Data Science/i)).toBeInTheDocument();
+
+    await act(async () => {
+      fireEvent.click(screen.getByText("Annuler"));
+    });
+
+    expect(screen.queryByPlaceholderText(/Ex: Python Data Science/i)).not.toBeInTheDocument();
   });
 });

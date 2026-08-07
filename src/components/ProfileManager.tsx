@@ -526,6 +526,7 @@ export const ProfileManager: React.FC<ProfileManagerProps> = ({
                     <Tooltip content="Éditer la configuration de ce profil" position="top">
                       <button
                         onClick={() => handleOpenEditModal(prof)}
+                        aria-label={`Éditer le profil ${prof.name}`}
                         className="p-1.5 rounded hover:bg-slate-800 text-slate-400 hover:text-slate-200 transition-colors"
                       >
                         <Edit2 className="w-3.5 h-3.5" />
@@ -535,6 +536,7 @@ export const ProfileManager: React.FC<ProfileManagerProps> = ({
                       <Tooltip content="Supprimer définitivement ce profil" position="top">
                         <button
                           onClick={() => handleDeleteProfile(prof.id)}
+                          aria-label={`Supprimer le profil ${prof.name}`}
                           className="p-1.5 rounded hover:bg-red-500/10 text-slate-400 hover:text-red-400 transition-colors"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
