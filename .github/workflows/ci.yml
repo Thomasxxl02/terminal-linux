@@ -55,6 +55,23 @@ jobs:
       - name: Build (Vite + server.cjs + monaco self-host)
         run: npm run build
 
+      - name: Smoke test — serveur de PRODUCTION (server.cjs réel)
+        run: npm run test:smoke
+
+      - name: Validation YAML des workflows
+        run: |
+          python3 -c "
+          import glob, sys
+          try:
+              import yaml
+          except ImportError:
+              print('pyyaml absent — validation structurelle ignorée')
+              sys.exit(0)
+          for f in glob.glob('.github/workflows/*.yml'):
+              yaml.safe_load(open(f))
+              print(f'  ✓ {f}')
+          "
+
       - name: "Rust — check, clippy, tests, audit"
         working-directory: src-tauri
         run: |
@@ -112,6 +129,13 @@ jobs:
 
       - name: Build des bundles Tauri (deb/rpm/AppImage)
         run: npx tauri build
+
+      - name: Vérification des bundles (contenu réel)
+        run: |
+          test -f "src-tauri/target/release/bundle/deb/"*.deb && echo "  ✓ .deb présent"
+          test -f "src-tauri/target/release/bundle/rpm/"*.rpm && echo "  ✓ .rpm présent"
+          test -f "src-tauri/target/release/bundle/appimage/"*.AppImage && echo "  ✓ .AppImage présent"
+          dpkg-deb --info "src-tauri/target/release/bundle/deb/"*.deb | grep -E "Package|Version" | head -2
 
       - name: Upload des bundles (artefacts de release)
         uses: actions/upload-artifact@v4
