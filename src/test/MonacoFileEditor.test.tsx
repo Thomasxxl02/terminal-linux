@@ -13,6 +13,7 @@ vi.mock("@monaco-editor/react", () => {
         data-language={language}
       />
     ),
+    loader: { config: () => {} },
   };
 });
 

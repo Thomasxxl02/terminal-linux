@@ -221,6 +221,9 @@ describe("WebSockets (sync.ts) — flux PTY et logs", () => {
     expect(fs.existsSync(logPath)).toBe(true);
 
     ws.close();
+
+    // Nettoyage : le fichier de test ne doit pas polluer le workspace
+    fs.rmSync(logPath, { force: true });
   });
 
   it("désinscrit le client PTY à la fermeture", async () => {

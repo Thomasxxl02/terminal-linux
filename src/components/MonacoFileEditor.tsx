@@ -1,6 +1,11 @@
 import React, { memo, useEffect, useState, useCallback, useMemo } from "react";
-import Editor from "@monaco-editor/react";
+import Editor, { loader } from "@monaco-editor/react";
 import { motion, AnimatePresence } from "motion/react";
+
+// Monaco self-hosté localement (scripts/copy-monaco.mjs → public/monaco/vs) :
+// l'éditeur fonctionne HORS-LIGNE (desktop Tauri) sans dépendre du CDN.
+// Configuré une fois au chargement du module (API @monaco-editor/loader).
+loader.config({ paths: { vs: "/monaco/vs" } });
 import {
   FileText,
   Save,
