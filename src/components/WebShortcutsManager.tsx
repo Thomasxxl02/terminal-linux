@@ -11,7 +11,6 @@ import {
   Check,
   Download,
   Upload,
-  RefreshCw,
   Terminal,
   Folder,
   Tag,
@@ -32,6 +31,8 @@ import { useLocalStorage } from "../hooks/useLocalStorage";
 import { Tooltip } from "./Tooltip";
 import { ConfirmationModal } from "./ConfirmationModal";
 import { WebShortcutFormModal } from "./WebShortcutFormModal";
+import { WebShortcutPreviewModal } from "./WebShortcutPreviewModal";
+import { WebShortcutImportModal } from "./WebShortcutImportModal";
 
 const DEFAULT_SHORTCUTS: WebShortcut[] = [
   {
@@ -618,101 +619,25 @@ export const WebShortcutsManager: React.FC<WebShortcutsManagerProps> = ({
         />
       )}
 
-      {/* Embedded Iframe Preview Modal */}
       {previewShortcut && (
-        <div className="fixed inset-0 z-50 flex flex-col bg-slate-950 font-sans">
-          {/* Top Address Bar */}
-          <div className="p-3 bg-slate-900 border-b border-slate-800 flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <Globe className="w-4 h-4 text-emerald-400" />
-              <span className="text-xs font-bold text-slate-200">{previewShortcut.title}</span>
-            </div>
-
-            <div className="flex-1 max-w-xl mx-auto bg-slate-950 border border-slate-800 px-3 py-1.5 rounded-lg flex items-center justify-between text-xs font-mono text-slate-400">
-              <span className="truncate">{previewShortcut.url}</span>
-              <a
-                href={previewShortcut.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-slate-500 hover:text-slate-300 ml-2"
-                title="Ouvrir dans un onglet externe"
-              >
-                <ExternalLink className="w-3.5 h-3.5" />
-              </a>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => {
-                  const currentSc = previewShortcut;
-                  setPreviewShortcut(null);
-                  setTimeout(() => setPreviewShortcut(currentSc), 50);
-                }}
-                className="p-1.5 text-slate-400 hover:text-slate-200 bg-slate-800 rounded-lg"
-                title="Rafraîchir"
-              >
-                <RefreshCw className="w-4 h-4" />
-              </button>
-              <button
-                onClick={() => setPreviewShortcut(null)}
-                className="p-1.5 text-slate-400 hover:text-slate-200 bg-slate-800 rounded-lg"
-                title="Fermer l'aperçu"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-
-          {/* Iframe Frame */}
-          <div className="flex-1 w-full bg-white relative">
-            <iframe
-              src={previewShortcut.url}
-              title={previewShortcut.title}
-              className="w-full h-full border-none"
-              sandbox="allow-same-origin allow-scripts allow-popups allow-forms"
-            />
-          </div>
-        </div>
+        <WebShortcutPreviewModal
+          shortcut={previewShortcut}
+          onClose={() => setPreviewShortcut(null)}
+          onRefresh={() => {
+            const currentSc = previewShortcut;
+            setPreviewShortcut(null);
+            setTimeout(() => setPreviewShortcut(currentSc), 50);
+          }}
+        />
       )}
 
-      {/* Import JSON Modal */}
       {isImportModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
-          <div className="bg-slate-900 border border-slate-800 rounded-xl shadow-2xl w-full max-w-lg p-5">
-            <h3 className="text-sm font-bold text-slate-100 mb-2 font-mono flex items-center gap-2">
-              <Upload className="w-4 h-4 text-emerald-400" />
-              Importer des Raccourcis (Format JSON)
-            </h3>
-            <p className="text-xs text-slate-400 mb-3">
-              Collez un tableau JSON de raccourcis web pour remplacer votre liste actuelle.
-            </p>
-            <form onSubmit={handleImportJson} className="space-y-4">
-              <textarea
-                rows={8}
-                required
-                value={importJsonText}
-                onChange={(e) => setImportJsonText(e.target.value)}
-                placeholder='[ { "id": "sc-1", "title": "GitHub", "url": "https://github.com", "category": "Dev" } ]'
-                className="w-full bg-slate-950 border border-slate-800 text-slate-100 px-3 py-2 text-xs font-mono rounded-lg focus:outline-none focus:border-emerald-500"
-              />
-              <div className="flex items-center justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setIsImportModalOpen(false)}
-                  className="px-4 py-2 bg-slate-800 text-slate-300 text-xs font-mono font-bold rounded-lg"
-                >
-                  Annuler
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-slate-950 text-xs font-mono font-bold rounded-lg"
-                >
-                  Valider l'import
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+        <WebShortcutImportModal
+          importJsonText={importJsonText}
+          setImportJsonText={setImportJsonText}
+          handleImportJson={handleImportJson}
+          onClose={() => setIsImportModalOpen(false)}
+        />
       )}
 
       {/* Confirmation Modal for Delete */}
