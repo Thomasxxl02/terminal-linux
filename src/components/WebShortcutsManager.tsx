@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { memo, useState } from "react";
 import {
   Globe,
   Plus,
@@ -12,17 +12,8 @@ import {
   Download,
   Upload,
   Terminal,
-  Folder,
-  Tag,
   X,
   Eye,
-  Server,
-  Code,
-  Shield,
-  Layers,
-  Cpu,
-  Bookmark,
-  Sparkles,
   CheckCircle2,
   Filter
 } from "lucide-react";
@@ -137,7 +128,7 @@ interface WebShortcutsManagerProps {
   activeSessionId?: string | null;
 }
 
-export const WebShortcutsManager: React.FC<WebShortcutsManagerProps> = ({
+const WebShortcutsManagerInner: React.FC<WebShortcutsManagerProps> = ({
   onExecuteInTerminal,
 }) => {
   const [shortcuts, setShortcuts] = useLocalStorage<WebShortcut[]>(
@@ -656,3 +647,5 @@ export const WebShortcutsManager: React.FC<WebShortcutsManagerProps> = ({
     </div>
   );
 };
+
+export const WebShortcutsManager = memo(WebShortcutsManagerInner);

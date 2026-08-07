@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, useMemo } from "react";
+import React, { memo, useEffect, useState, useCallback, useMemo } from "react";
 import Editor from "@monaco-editor/react";
 import { motion, AnimatePresence } from "motion/react";
 import {
@@ -6,14 +6,11 @@ import {
   Save,
   RefreshCw,
   FileCode,
-  ChevronRight,
   Terminal as TermIcon,
   Check,
   AlertCircle,
-  Plus,
   X,
   Settings,
-  ChevronDown,
   PanelLeft,
   CheckCircle2
 } from "lucide-react";
@@ -38,7 +35,7 @@ interface MonacoTab {
 // (EditorSettings extrait dans MonacoSettingsPanel.tsx ;
 //  getDisplayPath extrait dans MonacoExplorer.tsx)
 
-export const MonacoFileEditor: React.FC<MonacoFileEditorProps> = ({
+const MonacoFileEditorInner: React.FC<MonacoFileEditorProps> = ({
   onExecuteInTerminal,
   initialFilePath,
 }) => {
@@ -500,7 +497,6 @@ export const MonacoFileEditor: React.FC<MonacoFileEditorProps> = ({
               onSetRenameName={setRenameName}
               onSetDeletingItem={setDeletingItem}
               onSetSearchQuery={setSearchQuery}
-              onSetDraggingOverTree={setIsDraggingOverTree}
               onFetchTree={fetchTree}
               onItemClick={handleItemClick}
               onCreateItem={handleCreateItem}
@@ -737,3 +733,5 @@ export const MonacoFileEditor: React.FC<MonacoFileEditorProps> = ({
     </div>
   );
 };
+
+export const MonacoFileEditor = memo(MonacoFileEditorInner);

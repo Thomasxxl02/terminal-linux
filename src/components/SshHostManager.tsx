@@ -1,6 +1,5 @@
 import React, { useState } from "react";
 import {
-  Key,
   Server,
   Terminal,
   Plus,
@@ -10,21 +9,16 @@ import {
   Check,
   Shield,
   Radio,
-  Globe,
   Lock,
-  ArrowRight,
   Zap,
-  Layers,
   Search,
-  ExternalLink,
-  ChevronRight,
   Download,
   Upload,
   ShieldAlert,
   ShieldCheck,
   Code
 } from "lucide-react";
-import { SshHost, TerminalSessionInfo } from "../types";
+import { SshHost } from "../types";
 import { useSecureStorage } from "../hooks/useSecureStorage";
 import { errMsg } from "../lib/errors";
 import { SshHostFormModal } from "./SshHostFormModal";
@@ -39,17 +33,13 @@ const STORAGE_KEY_SSH = "terminal_ssh_hosts";
 interface SshHostManagerProps {
   onExecuteInTerminal: (command: string, sessionId?: string) => void;
   onLaunchSshSession: (host: SshHost) => void;
-  sessions: TerminalSessionInfo[];
-  activeSessionId: string | null;
 }
 
 export const SshHostManager: React.FC<SshHostManagerProps> = ({
   onExecuteInTerminal,
   onLaunchSshSession,
-  sessions,
-  activeSessionId,
 }) => {
-  const { value: hostsValue, loading: hostsLoading, setValue: setHosts } =
+  const { value: hostsValue, setValue: setHosts } =
     useSecureStorage<SshHost[]>(STORAGE_KEY_SSH, DEFAULT_SSH_HOSTS);
   // Pendant le chargement async du keyring, on affiche les hôtes par défaut
   const hosts = hostsValue ?? DEFAULT_SSH_HOSTS;
@@ -399,7 +389,6 @@ export const SshHostManager: React.FC<SshHostManagerProps> = ({
       {/* Grid of SSH Hosts */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
         {filteredHosts.map((host) => {
-          const sshCmd = generateSshCommand(host);
           return (
             <div
               key={host.id}

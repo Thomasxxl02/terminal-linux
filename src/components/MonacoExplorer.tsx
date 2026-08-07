@@ -51,7 +51,6 @@ export interface MonacoExplorerProps {
   onSetRenameName: (v: string) => void;
   onSetDeletingItem: (v: FileTreeItem | null) => void;
   onSetSearchQuery: (v: string) => void;
-  onSetDraggingOverTree: (v: boolean) => void;
 
   onFetchTree: (dir?: string) => void;
   onItemClick: (item: FileTreeItem) => void;
@@ -89,7 +88,6 @@ export const MonacoExplorer: React.FC<MonacoExplorerProps> = ({
   onSetRenameName,
   onSetDeletingItem,
   onSetSearchQuery,
-  onSetDraggingOverTree,
 
   onFetchTree,
   onItemClick,

@@ -1,4 +1,3 @@
-import React from "react";
 import { render, screen, fireEvent, act } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { PlaybookSequencer } from "../components/PlaybookSequencer";
@@ -103,7 +102,7 @@ describe("PlaybookSequencer — export, import, création, suppression", () => {
 
     const readerMock = vi.fn().mockImplementation(function (this: { onload: ((e: { target: { result: string } }) => void) | null; readAsText: (f: File) => void }) {
       this.onload = null;
-      this.readAsText = (f: File) => {
+      this.readAsText = (_f: File) => {
         setTimeout(() => {
           this.onload?.({ target: { result: JSON.stringify(validPb) } });
         }, 0);

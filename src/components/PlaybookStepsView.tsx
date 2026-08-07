@@ -1,4 +1,3 @@
-import React from "react";
 import { Clock, CheckCircle2, Activity } from "lucide-react";
 
 interface PlaybookStepView {

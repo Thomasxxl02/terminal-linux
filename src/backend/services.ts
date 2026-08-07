@@ -1,4 +1,4 @@
-import { spawn, exec, ChildProcessWithoutNullStreams } from "child_process";
+import { spawn,ChildProcessWithoutNullStreams } from "child_process";
 import fs from "fs";
 import os from "os";
 import path from "path";

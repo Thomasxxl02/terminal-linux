@@ -6,20 +6,15 @@ import {
   Check,
   Plus,
   Trash2,
-  Terminal as TermIcon,
   Globe,
   FileSearch,
   Activity,
   Box as BoxIcon,
-  HelpCircle,
   Code,
   Sliders,
-  Save,
   Info,
-  Layers,
   Search,
   AlertCircle,
-  Upload,
   Download,
   Flame,
   CheckCircle2,
@@ -423,7 +418,6 @@ export const SkillsHub: React.FC<SkillsHubProps> = ({ onExecuteInTerminal }) => 
           newScriptTemplate={newScriptTemplate}
           setNewScriptTemplate={setNewScriptTemplate}
           newParams={newParams}
-          setNewParams={setNewParams}
           tempParamName={tempParamName}
           setTempParamName={setTempParamName}
           tempParamLabel={tempParamLabel}

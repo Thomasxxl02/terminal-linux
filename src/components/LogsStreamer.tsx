@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useMemo } from "react";
+import React, { useEffect, useRef, useState, useMemo, memo } from "react";
 import { wsUrlWithToken } from "../lib/api";
 import { isTauri, tailLogFileWeb } from "../lib/tauri";
 import { errMsg } from "../lib/errors";
@@ -34,7 +34,7 @@ const PRESET_FILES = [
   { label: "Nginx Erreurs", path: "/var/log/nginx/error.log" },
 ];
 
-export const LogsStreamer: React.FC = () => {
+const LogsStreamerInner: React.FC = () => {
   const [logPath, setLogPath] = useState<string>("/tmp/application.log");
   const [lines, setLines] = useState<LogLine[]>([]);
   const [isConnected, setIsConnected] = useState<boolean>(false);
@@ -334,13 +334,6 @@ export const LogsStreamer: React.FC = () => {
   };
 
   const colorizeLogParts = (text: string, level: LogLine["level"]) => {
-    // Regexes to extract common log patterns: Timestamps, HTTP methods, status codes, IPs
-    const ipPattern = /\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b/g;
-    const httpMethods = /\b(GET|POST|PUT|DELETE|OPTIONS|HEAD|PATCH)\b/g;
-    
-    // Quick parse: if it matches IPs or Methods, highlight them beautifully
-    let rendered: React.ReactNode = text;
-    
     if (level === "error") {
       return <span className="text-red-400 font-medium">{text}</span>;
     } else if (level === "warn") {
@@ -645,3 +638,5 @@ export const LogsStreamer: React.FC = () => {
     </div>
   );
 };
+
+export const LogsStreamer = memo(LogsStreamerInner);

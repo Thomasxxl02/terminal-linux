@@ -41,7 +41,7 @@ app.use((req, res, next) => {
 // Headers de sécurité HTTP (mode web). CSP permissive pour xterm.js +
 // Monaco (WebGL, workers, styles inline) ; inapplicable en webview Tauri
 // (tauri:// n'envoie pas de requêtes HTTP vers ce serveur).
-app.use((req, res, next) => {
+app.use((_req, res, next) => {
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("X-Frame-Options", "DENY");
   res.setHeader("Referrer-Policy", "no-referrer");
@@ -65,7 +65,7 @@ app.use((req, res, next) => {
 app.use("/api", router);
 
 // Websockets initialization (Sync/WS logic separated!)
-const { pingInterval } = setupWebSockets(server);
+setupWebSockets(server);
 
 // Journal d'application RÉEL : chaque requête HTTP qui traverse le serveur
 // Express est consignée dans /tmp/application.log (méthode, chemin, statut).
@@ -132,7 +132,7 @@ async function startServer() {
       skip: () => process.env.NODE_ENV === "test",
     });
     app.use(express.static(distPath));
-    app.get("*", spaLimiter, (req, res) => {
+    app.get("*", spaLimiter, (_req, res) => {
       res.sendFile(path.join(distPath, "index.html"));
     });
   }

@@ -1,4 +1,3 @@
-import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { SshHostManager } from '../components/SshHostManager';
@@ -17,8 +16,6 @@ describe('SshHostManager Component', () => {
       <SshHostManager
         onExecuteInTerminal={mockOnExecuteInTerminal}
         onLaunchSshSession={mockOnLaunchSshSession}
-        sessions={[]}
-        activeSessionId={null}
       />
     );
 
@@ -39,8 +36,6 @@ describe('SshHostManager Component', () => {
       <SshHostManager
         onExecuteInTerminal={mockOnExecuteInTerminal}
         onLaunchSshSession={mockOnLaunchSshSession}
-        sessions={[]}
-        activeSessionId={null}
       />
     );
 
@@ -60,8 +55,6 @@ describe('SshHostManager Component', () => {
       <SshHostManager
         onExecuteInTerminal={mockOnExecuteInTerminal}
         onLaunchSshSession={mockOnLaunchSshSession}
-        sessions={[]}
-        activeSessionId={null}
       />
     );
 
@@ -81,8 +74,6 @@ describe('SshHostManager Component', () => {
       <SshHostManager
         onExecuteInTerminal={mockOnExecuteInTerminal}
         onLaunchSshSession={mockOnLaunchSshSession}
-        sessions={[]}
-        activeSessionId={null}
       />
     );
 

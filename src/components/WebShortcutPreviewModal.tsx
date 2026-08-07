@@ -1,4 +1,3 @@
-import React from "react";
 import { Globe, ExternalLink, RefreshCw, X } from "lucide-react";
 import { WebShortcut } from "../types";
 

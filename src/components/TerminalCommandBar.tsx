@@ -1,4 +1,3 @@
-import React from "react";
 import { History, ChevronDown, Trash2, Send } from "lucide-react";
 
 interface TerminalCommandBarProps {

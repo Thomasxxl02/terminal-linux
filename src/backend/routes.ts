@@ -65,7 +65,7 @@ const loginLimiter = rateLimit({
 router.post("/auth/login", loginLimiter, handleLogin);
 router.post("/auth/refresh", loginLimiter, handleRefresh);
 router.post("/auth/logout", handleLogout);
-router.get("/health", (req, res) => {
+router.get("/health", (_req, res) => {
   res.json({ status: "ok", service: "Tauri Terminal PTY Backend" });
 });
 
@@ -73,7 +73,7 @@ router.get("/health", (req, res) => {
 router.use(requireAuth);
 
 // 1. PTY Sessions APIs (Maps HTTP Requests to PtyService)
-router.get("/pty/sessions", (req, res) => {
+router.get("/pty/sessions", (_req, res) => {
   const sessions = ptyService.getAllSessions().map((s) => ({
     id: s.id,
     name: s.name,
@@ -217,7 +217,7 @@ function getProcesses(): Promise<ProcessInfo[]> {
   });
 }
 
-router.get("/system/stats", async (req, res) => {
+router.get("/system/stats", async (_req, res) => {
   const now = Date.now();
   if (cachedStats && now - cachedStats.timestamp < STATS_CACHE_TTL_MS) {
     return res.json(cachedStats.data);
@@ -537,7 +537,7 @@ router.get("/network/port-check", (req, res) => {
 });
 
 // 6c. Audit RÉEL des shells présents sur le système (compatibilité)
-router.get("/shells/check", (req, res) => {
+router.get("/shells/check", (_req, res) => {
   const candidates: { name: string; path: string }[] = [
     { name: "bash", path: "/bin/bash" },
     { name: "bash", path: "/usr/bin/bash" },

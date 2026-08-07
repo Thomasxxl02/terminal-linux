@@ -1,5 +1,4 @@
-import React from "react";
-import { render, screen, fireEvent, act, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent, act,} from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ProfileManager } from "../components/ProfileManager";
 
@@ -8,7 +7,7 @@ const { mockSetValue } = vi.hoisted(() => ({ mockSetValue: vi.fn() }));
 
 // Mock du stockage sécurisé : valeurs synchrones pré-remplies
 vi.mock("../hooks/useSecureStorage", () => ({
-  useSecureStorage: (key: string, initial: unknown) => {
+  useSecureStorage: (key: string, _initial: unknown) => {
     if (key.includes("profile")) {
       return {
         value: [

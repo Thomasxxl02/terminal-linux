@@ -1,18 +1,10 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import {
-  Key,
-  Server,
-  Terminal,
   Plus,
   Trash2,
   Edit2,
   Copy,
   Check,
-  Shield,
-  Radio,
-  Globe,
-  Lock,
-  ArrowRight,
   Zap,
   Play,
   Square,
@@ -20,17 +12,11 @@ import {
   Wifi,
   RefreshCw,
   AlertCircle,
-  HelpCircle,
   Search,
-  ExternalLink,
-  ChevronRight,
   Monitor,
   CheckCircle,
-  XCircle,
-  Workflow,
-  Sparkles
 } from "lucide-react";
-import { SshHost, SshTunnel, TerminalSessionInfo } from "../types";
+import { SshHost, SshTunnel } from "../types";
 import { useSecureStorage } from "../hooks/useSecureStorage";
 import { useLocalStorage } from "../hooks/useLocalStorage";
 import { apiFetch } from "../lib/api";
@@ -48,14 +34,10 @@ const DEFAULT_TUNNELS: SshTunnel[] = [
 
 interface SshTunnelManagerProps {
   onExecuteInTerminal: (command: string, sessionId?: string) => void;
-  sessions: TerminalSessionInfo[];
-  activeSessionId: string | null;
 }
 
 export const SshTunnelManager: React.FC<SshTunnelManagerProps> = ({
   onExecuteInTerminal,
-  sessions,
-  activeSessionId,
 }) => {
   const { value: hostsValue } = useSecureStorage<SshHost[]>(STORAGE_KEY_SSH, DEFAULT_SSH_HOSTS);
   const hosts = hostsValue ?? DEFAULT_SSH_HOSTS;
@@ -73,7 +55,6 @@ export const SshTunnelManager: React.FC<SshTunnelManagerProps> = ({
   const [portCheckResult, setPortCheckResult] = useState<{ status: 'occupied' | 'free'; message: string; suggestions: string[] } | null>(null);
 
   // Live Chart History simulation state
-  const [chartHistory, setChartHistory] = useState<Record<string, number[]>>({});
 
   // Diagnostic panel state
   const [diagnosticTunnelId, setDiagnosticTunnelId] = useState<string | null>(null);
@@ -310,6 +291,7 @@ export const SshTunnelManager: React.FC<SshTunnelManagerProps> = ({
     return matchesSearch && matchesType;
   });
 
+
   return (
     <div className="flex-1 bg-slate-950 text-slate-100 p-6 overflow-y-auto custom-scrollbar flex flex-col gap-6">
       {/* Top Banner and Header */}
@@ -371,7 +353,6 @@ export const SshTunnelManager: React.FC<SshTunnelManagerProps> = ({
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {filteredTunnels.map((tunnel) => {
           const isTActive = tunnel.status === "active";
-          const hist = chartHistory[tunnel.id] || Array(12).fill(5);
 
           return (
             <div
@@ -440,19 +421,6 @@ export const SshTunnelManager: React.FC<SshTunnelManagerProps> = ({
                       Rx: {formatBytes(tunnel.trafficReceived)}
                     </span>
                     <span>{tunnel.latency || 22}ms</span>
-                  </div>
-
-                  {/* Sparkline Drawing */}
-                  <div className="h-6 w-full mt-1.5">
-                    <svg className="w-full h-full" viewBox="0 0 120 20" preserveAspectRatio="none">
-                      <path
-                        d={`M ${hist.map((val, i) => `${(i * 120) / 11} ${Math.max(2, 20 - (val / 100) * 18)}`).join(" L ")}`}
-                        fill="none"
-                        stroke="#10b981"
-                        strokeWidth="1.5"
-                        strokeLinecap="round"
-                      />
-                    </svg>
                   </div>
                 </div>
               ) : (

@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, Suspense, useRef } from "react";
+import { useEffect, useState, useCallback, Suspense, useRef } from "react";
 import { Sidebar } from "./components/Sidebar";
 import { TerminalTabs } from "./components/TerminalTabs";
 import { TerminalView } from "./components/TerminalView";
@@ -21,7 +21,6 @@ import { TerminalSessionInfo, SystemStats, ShellProfile, SavedTabSession, SshHos
 import {
   apiFetch,
   clearAuth,
-  getToken,
   getRole,
   isAuthenticated,
   login,
@@ -91,7 +90,7 @@ export default function App() {
   const [notificationsEnabled, setNotificationsEnabled] = useState<boolean>(false);
 
   // Request browser notifications permission
-  const handleRequestNotifications = () => {
+  const handleRequestNotifications = useCallback(() => {
     if ("Notification" in window) {
       if (Notification.permission === "granted") {
         setNotificationsEnabled(!notificationsEnabled);
@@ -106,7 +105,7 @@ export default function App() {
         });
       }
     }
-  };
+  }, [notificationsEnabled]);
 
   // Keyboard shortcut listener for Ctrl+Shift+P
   useEffect(() => {
@@ -601,8 +600,6 @@ export default function App() {
             <LazySshHostManager
               onExecuteInTerminal={handleExecuteInTerminal}
               onLaunchSshSession={handleLaunchSshSession}
-              sessions={sessions}
-              activeSessionId={activeSessionId}
             />
           </Suspense>
         )}
@@ -611,8 +608,6 @@ export default function App() {
           <Suspense fallback={<ViewFallback label="Tunnels" />}>
             <LazySshTunnelManager
               onExecuteInTerminal={handleExecuteInTerminal}
-              sessions={sessions}
-              activeSessionId={activeSessionId}
             />
           </Suspense>
         )}

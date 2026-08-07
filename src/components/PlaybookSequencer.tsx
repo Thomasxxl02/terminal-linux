@@ -8,19 +8,8 @@ import {
   Upload,
   FileCode2,
   CheckCircle2,
-  XCircle,
   Clock,
-  AlertTriangle,
-  Terminal,
-  Activity,
-  Award,
-  BookOpen,
-  PlusCircle,
   BarChart3,
-  ChevronRight,
-  Sparkles,
-  Zap,
-  Check,
   Edit2
 } from "lucide-react";
 import { Playbook, PlaybookStep, TerminalSessionInfo } from "../types";

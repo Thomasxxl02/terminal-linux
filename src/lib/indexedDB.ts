@@ -28,7 +28,7 @@ export class IndexedDBStore {
 
       const request = window.indexedDB.open(this.dbName, 1);
 
-      request.onupgradeneeded = (event) => {
+      request.onupgradeneeded = (_event) => {
         const db = request.result;
         if (!db.objectStoreNames.contains(this.storeName)) {
           db.createObjectStore(this.storeName, { keyPath: "path" });

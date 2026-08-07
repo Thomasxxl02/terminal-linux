@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useCallback } from "react";
+import React, { useEffect, useRef, useState, useCallback, memo } from "react";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebglAddon } from "@xterm/addon-webgl";
@@ -7,18 +7,14 @@ import { WebLinksAddon } from "@xterm/addon-web-links";
 import "@xterm/xterm/css/xterm.css";
 
 import {
-  Bell,
   Folder,
   FolderOpen,
   FileCode,
-  FileText,
   RefreshCw,
   Upload,
-  PanelLeft,
   ArrowRight,
-  Play
 } from "lucide-react";
-import { TerminalSessionInfo, TerminalTheme, FileTreeItem } from "../types";
+import { TerminalSessionInfo,FileTreeItem } from "../types";
 import { TERMINAL_THEMES } from "../constants/themes";
 import { TerminalToolbar } from "./TerminalToolbar";
 import { TerminalCommandBar } from "./TerminalCommandBar";
@@ -41,7 +37,7 @@ interface TerminalViewProps {
 
 const STORAGE_KEY_HISTORY = "tauri_linux_terminal_command_history";
 
-export const TerminalView: React.FC<TerminalViewProps> = ({
+const TerminalViewInner: React.FC<TerminalViewProps> = ({
   session,
   activeThemeId,
   onThemeChange,
@@ -611,6 +607,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       style={{ backgroundColor: currentTheme.background }}
     >
       <TerminalToolbar
+              statusText={statusText}
         session={session}
         isConnected={isConnected}
         showExplorer={showExplorer}
@@ -770,3 +767,4 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
   );
 };
 
+export const TerminalView = memo(TerminalViewInner);

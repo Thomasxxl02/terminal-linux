@@ -8,14 +8,8 @@ import {
   RotateCcw,
   CheckCircle2,
   BookmarkCheck,
-  Sparkles,
-  Layers,
-  Terminal,
   Activity,
   FileCode2,
-  Check,
-  AlertCircle,
-  HelpCircle,
   Cpu
 } from "lucide-react";
 import { ShellProfile, SavedTabSession, TerminalSessionInfo } from "../types";

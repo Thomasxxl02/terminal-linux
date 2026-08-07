@@ -11,7 +11,6 @@ import {
   Columns,
   Rows,
   Maximize2,
-  X,
   Play,
   Zap,
   Bell,
@@ -22,7 +21,7 @@ import {
   Globe
 } from "lucide-react";
 
-import { TerminalSessionInfo, MaintenanceTask, TerminalTheme } from "../types";
+import { TerminalSessionInfo,} from "../types";
 import { MAINTENANCE_TASKS } from "../constants/snippets";
 import { TERMINAL_THEMES } from "../constants/themes";
 

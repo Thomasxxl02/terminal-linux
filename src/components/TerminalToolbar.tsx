@@ -13,6 +13,7 @@ import { TERMINAL_THEMES } from "../constants/themes";
 interface TerminalToolbarProps {
   session: { name: string; shell: string };
   isConnected: boolean;
+  statusText: string;
   showExplorer: boolean;
   setShowExplorer: (v: boolean) => void;
   showSearch: boolean;
@@ -36,6 +37,7 @@ interface TerminalToolbarProps {
 export function TerminalToolbar({
   session,
   isConnected,
+  statusText,
   showExplorer,
   setShowExplorer,
   showSearch,
@@ -63,6 +65,7 @@ export function TerminalToolbar({
             className={`w-2 h-2 rounded-full ${
               isConnected ? "bg-emerald-400 animate-pulse" : "bg-amber-500"
             }`}
+            title={statusText}
           />
           <span className="font-mono text-slate-200 font-medium text-xs">
             {session.name}
@@ -70,6 +73,11 @@ export function TerminalToolbar({
           <span className="text-[10px] font-mono text-slate-400 bg-slate-900 px-1.5 py-0.5 rounded border border-slate-800">
             {session.shell}
           </span>
+          {!isConnected && statusText && (
+            <span className="text-[10px] font-mono text-amber-400/90">
+              {statusText}
+            </span>
+          )}
         </div>
 
         {/* Right Action Controls */}

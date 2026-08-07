@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState,useCallback } from "react";
 
 /**
  * Stockage localStorage simple, SANS fausse "obfuscation".

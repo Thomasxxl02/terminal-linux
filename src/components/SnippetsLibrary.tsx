@@ -4,17 +4,12 @@ import {
   Play,
   Copy,
   Check,
-  Terminal,
   Search,
   Plus,
   Trash2,
   ListFilter,
   Layers,
-  Sparkles,
-  ArrowRight,
-  RefreshCw,
   FolderPlus,
-  ArrowUpRight
 } from "lucide-react";
 import { COMMAND_SNIPPETS } from "../constants/snippets";
 import { CommandSnippet } from "../types";

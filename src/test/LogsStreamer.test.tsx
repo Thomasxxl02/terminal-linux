@@ -1,4 +1,3 @@
-import React from "react";
 import { render, screen, fireEvent, waitFor, act } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { LogsStreamer } from "../components/LogsStreamer";
@@ -24,7 +23,7 @@ class MockWebSocket {
     });
   }
 
-  send(data: string) {}
+  send(_data: string) {}
   close() {
     this.readyState = 3; // CLOSED
     if (this.onclose) this.onclose();
@@ -63,9 +62,8 @@ describe("LogsStreamer Component", () => {
   });
 
   it("connects to WebSocket and displays received log history and lines", async () => {
-    let container: any;
     await act(async () => {
-      container = render(<LogsStreamer />);
+      render(<LogsStreamer />);
     });
 
     // Wait for mock connection to open

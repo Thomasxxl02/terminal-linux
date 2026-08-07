@@ -1,4 +1,3 @@
-import React from "react";
 import { Code, AlertCircle, Save, Trash2 } from "lucide-react";
 
 // Type identique à celui déclaré dans SkillsHub (cohérence stricte)
@@ -20,7 +19,6 @@ interface SkillCreatorPanelProps {
   newScriptTemplate: string;
   setNewScriptTemplate: (v: string) => void;
   newParams: SkillParameter[];
-  setNewParams: (v: SkillParameter[] | ((p: SkillParameter[]) => SkillParameter[])) => void;
   tempParamName: string;
   setTempParamName: (v: string) => void;
   tempParamLabel: string;
@@ -49,7 +47,6 @@ export function SkillCreatorPanel({
   newScriptTemplate,
   setNewScriptTemplate,
   newParams,
-  setNewParams,
   tempParamName,
   setTempParamName,
   tempParamLabel,

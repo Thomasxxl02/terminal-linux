@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import {
   Wrench,
   RefreshCw,
@@ -13,15 +13,9 @@ import {
   Shield,
   Terminal as TermIcon,
   Sparkles,
-  Search,
-  Activity,
   Server,
   HeartPulse,
-  Info,
   Clock,
-  ExternalLink,
-  Sliders,
-  AlertTriangle
 } from "lucide-react";
 import { MAINTENANCE_TASKS } from "../constants/snippets";
 import { TerminalSessionInfo } from "../types";

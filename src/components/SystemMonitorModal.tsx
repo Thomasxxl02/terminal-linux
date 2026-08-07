@@ -1,7 +1,6 @@
-import React, { useState, useEffect } from "react";
+import React, { memo, useState, useEffect } from "react";
 import { apiFetch } from "../lib/api";
-import { errMsg } from "../lib/errors";
-import { isTauri, listProcessesWeb, killProcessWeb } from "../lib/tauri";
+import { isTauri,killProcessWeb } from "../lib/tauri";
 import { NetworkTab, NodeTab, HardwareTab, ProcessesTable } from "./SystemMonitorTabs";
 import {
   Activity,
@@ -19,7 +18,7 @@ import {
   Copy,
   Gauge,
 } from "lucide-react";
-import { SystemStats, SystemProcess } from "../types";
+import { SystemStats,} from "../types";
 
 interface SystemMonitorModalProps {
   stats: SystemStats | null;
@@ -101,7 +100,7 @@ const MetricChart: React.FC<{
   );
 };
 
-export const SystemMonitorModal: React.FC<SystemMonitorModalProps> = ({
+const SystemMonitorModalInner: React.FC<SystemMonitorModalProps> = ({
   stats,
   onRefresh,
 }) => {
@@ -491,3 +490,5 @@ export const SystemMonitorModal: React.FC<SystemMonitorModalProps> = ({
     </div>
   );
 };
+
+export const SystemMonitorModal = memo(SystemMonitorModalInner);
