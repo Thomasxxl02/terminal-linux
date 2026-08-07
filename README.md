@@ -15,7 +15,6 @@
 - **Snippets** et **playbooks** réutilisables
 - **Séquencier de maintenance** système (apt, docker, logs)
 - **Surveillance système** : CPU, RAM, processus
-- **Assistant IA** (Gemini) intégré
 - **Mode desktop optionnel** via Tauri (Rust + portable-pty)
 
 ## 🚀 Démarrage local
@@ -59,8 +58,12 @@ Copiez `.env.example` vers `.env.local` et renseignez :
 
 | Variable | Requise | Description |
 |---|---|---|
-| `GEMINI_API_KEY` | Pour l'IA | Clé API Google Gemini |
-| `APP_URL` | Déploiement | URL publique de l'app |
+| `AUTH_SECRET` | Auth web | Clé HMAC de signature des JWT (≥ 16 caractères) |
+| `ADMIN_TOKEN` | Auth web | Token statique → rôle admin |
+| `DEV_TOKEN` | Auth web | Token statique → rôle developer |
+| `GUEST_TOKEN` | Auth web | Token statique → rôle guest |
+| `PORT` | Non | Port HTTP (défaut 3000) |
+| `WS_ALLOWED_ORIGINS` | Non | Origins WebSocket autorisées (anti-CSWSH) |
 
 ## 🏗️ Architecture
 

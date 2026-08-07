@@ -226,11 +226,8 @@ fn cpu_model() -> String {
         .ok()
         .and_then(|content| {
             content.lines().find_map(|line| {
-                if let Some(v) = line.strip_prefix("model name") {
-                    Some(v.split(':').nth(1).map(|s| s.trim().to_string()).unwrap_or_default())
-                } else {
-                    None
-                }
+                line.strip_prefix("model name")
+                    .map(|v| v.split(':').nth(1).map(str::trim).map(str::to_string).unwrap_or_default())
             })
         })
         .unwrap_or_else(|| "Unknown CPU".to_string())
@@ -303,7 +300,7 @@ pub fn list_processes() -> Result<Vec<ProcessInfo>, String> {
             .and_then(|s| {
                 s.lines().find_map(|l| {
                     if let Some(v) = l.strip_prefix("Uid:") {
-                        v.split_whitespace().next().map(|u| uid_to_user(u))
+                        v.split_whitespace().next().map(uid_to_user)
                     } else {
                         None
                     }

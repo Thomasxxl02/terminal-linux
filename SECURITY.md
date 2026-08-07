@@ -30,7 +30,7 @@ Les protections suivantes sont implémentées dans le code source (vérifiables 
 * Code modularisé : `routes.ts` (HTTP), `sync.ts` (WebSocket), `services.ts` (logique métier).
 
 ### 5. Gestion des secrets
-* Clés API (ex : `GEMINI_API_KEY`) chargées via `dotenv` — **jamais dans le code source**.
+* Secrets (ex : `AUTH_SECRET`, tokens d'authentification) chargés via `dotenv` — **jamais dans le code source**.
 * `.env*` ignoré par git (`.gitignore`), seul `.env.example` (sans secrets) est versionné.
 
 ### 6. Dépendances

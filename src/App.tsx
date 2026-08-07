@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, Suspense } from "react";
+import React, { useEffect, useState, useCallback, Suspense, useRef } from "react";
 import { Sidebar } from "./components/Sidebar";
 import { TerminalTabs } from "./components/TerminalTabs";
 import { TerminalView } from "./components/TerminalView";
@@ -264,6 +264,20 @@ export default function App() {
     };
   }, [fetchSessions, fetchSystemStats]);
 
+  // ── Bus de sortie PTY : TerminalView expose la sortie brute, et les
+  //    consommateurs (séquenceur de playbooks) s'y abonnent pour détecter
+  //    les codes de sortie réels des commandes exécutées. ──
+  const outputListenersRef = useRef<Set<(data: string) => void>>(new Set());
+  const subscribeTerminalOutput = useCallback((fn: (data: string) => void) => {
+    outputListenersRef.current.add(fn);
+    return () => {
+      outputListenersRef.current.delete(fn);
+    };
+  }, []);
+  const handleTerminalOutput = useCallback((data: string) => {
+    outputListenersRef.current.forEach((fn) => fn(data));
+  }, []);
+
   // Create new PTY Session (Tauri invoke ou API web)
   const createSession = useCallback(async (options: {
     name: string;
@@ -513,6 +527,7 @@ export default function App() {
                     setFontSize={setFontSize}
                     notificationsEnabled={notificationsEnabled}
                     onOpenMonacoFile={handleOpenMonacoFile}
+                    onOutput={handleTerminalOutput}
                   />
                 ) : (
                   /* Split View Container (Vertical or Horizontal) */
@@ -532,6 +547,7 @@ export default function App() {
                         setFontSize={setFontSize}
                         notificationsEnabled={notificationsEnabled}
                         onOpenMonacoFile={handleOpenMonacoFile}
+                        onOutput={handleTerminalOutput}
                       />
                     </div>
 
@@ -547,6 +563,7 @@ export default function App() {
                           setFontSize={setFontSize}
                           notificationsEnabled={notificationsEnabled}
                           onOpenMonacoFile={handleOpenMonacoFile}
+                          onOutput={handleTerminalOutput}
                         />
                       ) : (
                         <div className="flex flex-col items-center justify-center h-full text-slate-400 p-6 bg-slate-900/40">
@@ -617,6 +634,7 @@ export default function App() {
               activeSessionId={activeSessionId}
               onExecuteCommandInTerminal={handleExecuteInTerminal}
               onOpenTerminalView={() => setActiveView("terminal")}
+              subscribeOutput={subscribeTerminalOutput}
             />
           </Suspense>
         )}

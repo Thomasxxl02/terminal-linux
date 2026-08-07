@@ -34,6 +34,9 @@ interface TerminalViewProps {
   setFontSize: (size: number) => void;
   notificationsEnabled?: boolean;
   onOpenMonacoFile?: (filePath: string) => void;
+  /** Observateur de la sortie PTY (utilisé par le séquenceur de playbooks
+   *  pour détecter les codes de sortie réels des commandes). */
+  onOutput?: (data: string) => void;
 }
 
 const STORAGE_KEY_HISTORY = "tauri_linux_terminal_command_history";
@@ -46,6 +49,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
   setFontSize,
   notificationsEnabled = true,
   onOpenMonacoFile,
+  onOutput,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<Terminal | null>(null);
@@ -298,6 +302,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
     const handlePtyOutput = (data: string) => {
       term.write(data);
       lineBufferRef.current += data;
+      onOutput?.(data);
 
       // Check for process finish or long execution trigger
       const elapsedSec = (Date.now() - lastInputTimeRef.current) / 1000;

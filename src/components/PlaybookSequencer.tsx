@@ -165,6 +165,8 @@ interface PlaybookSequencerProps {
   activeSessionId: string | null;
   onExecuteCommandInTerminal: (cmd: string, sessionId?: string) => void;
   onOpenTerminalView: () => void;
+  /** S'abonne à la sortie brute du PTY (pour détecter les codes de sortie). */
+  subscribeOutput?: (fn: (data: string) => void) => () => void;
 }
 
 export const PlaybookSequencer: React.FC<PlaybookSequencerProps> = ({
@@ -172,6 +174,7 @@ export const PlaybookSequencer: React.FC<PlaybookSequencerProps> = ({
   activeSessionId = null,
   onExecuteCommandInTerminal,
   onOpenTerminalView,
+  subscribeOutput,
 }) => {
   // Playbooks = commandes shell exécutables (peuvent contenir des secrets)
   // → stockage sécurisé (keyring OS en Tauri, localStorage clair en web)
@@ -246,6 +249,52 @@ export const PlaybookSequencer: React.FC<PlaybookSequencerProps> = ({
 
     const startTime = Date.now();
     let isPbSuccess = true;
+    let failedStepTitle: string | null = null;
+
+    // Marqueur de code de sortie injecté après chaque commande : le
+    // séquenceur observe la sortie du PTY pour connaître le résultat RÉEL
+    // de l'étape (exit code du shell), au lieu de supposer le succès.
+    const EXIT_MARKER = "__PB_EXIT_";
+    const waitForStepExit = (command: string, delaySeconds: number): Promise<number | null> => {
+      return new Promise((resolve) => {
+        if (!subscribeOutput) {
+          // Pas de canal d'observation : on garde le comportement hérité
+          // (délai fixe, résultat inconnu) — jamais de faux échec.
+          setTimeout(() => resolve(null), delaySeconds * 1000);
+          return;
+        }
+        let buffer = "";
+        let done = false;
+        let timer: ReturnType<typeof setTimeout> | null = null;
+
+        const finish = (code: number | null) => {
+          if (done) return;
+          done = true;
+          if (timer) clearTimeout(timer);
+          resolve(code);
+        };
+
+        const unsub = subscribeOutput((data) => {
+          if (done) return;
+          buffer += data;
+          const match = buffer.match(new RegExp(EXIT_MARKER + "(\\d+)"));
+          if (match) {
+            unsub();
+            finish(parseInt(match[1], 10));
+          }
+        });
+
+        // Commande suivie du marqueur de sortie : `cmd; echo __PB_EXIT_$?`
+        onExecuteCommandInTerminal(`${command}; echo ${EXIT_MARKER}$?`, selectedSessionId);
+
+        // Timeout de sécurité : une commande bloquée (apt interactif…)
+        // ne doit pas figer le séquenceur indéfiniment (120 s).
+        timer = setTimeout(() => {
+          unsub();
+          finish(null);
+        }, 120_000);
+      });
+    };
 
     for (let i = 0; i < selectedPlaybook.steps.length; i++) {
       const step = selectedPlaybook.steps[i];
@@ -256,24 +305,49 @@ export const PlaybookSequencer: React.FC<PlaybookSequencerProps> = ({
       const banner = `echo -e "\\n\\e[1;33m[PLAYBOOK PIPELINE] Étape ${i + 1}/${selectedPlaybook.steps.length}: ${step.title}\\e[0m"`;
       onExecuteCommandInTerminal(banner, selectedSessionId);
 
-      // Execute actual command
-      onExecuteCommandInTerminal(step.command, selectedSessionId);
+      // Exécution réelle + attente du code de sortie
+      const exitCode = await waitForStepExit(step.command, step.delaySeconds || 1);
 
-      // Wait delaySeconds
-      await new Promise((res) => setTimeout(res, (step.delaySeconds || 1) * 1000));
+      if (exitCode !== null && exitCode !== 0) {
+        // L'étape a ÉCHOUÉ (code de sortie non nul)
+        setStepStatuses((prev) => ({ ...prev, [step.id]: "failed" }));
+        isPbSuccess = false;
+        failedStepTitle = step.title;
+        if (step.stopOnError) {
+          onExecuteCommandInTerminal(
+            `echo -e "\\n\\e[1;31m[PLAYBOOK PIPELINE] ❌ Étape échouée (stopOnError) : ${step.title}\\e[0m"`,
+            selectedSessionId
+          );
+          break; // arrêt du pipeline conformément à stopOnError
+        }
+        // stopOnError=false : on continue mais on marque l'échec
+        onExecuteCommandInTerminal(
+          `echo -e "\\n\\e[1;31m[PLAYBOOK PIPELINE] ⚠️ Étape échouée (poursuite) : ${step.title}\\e[0m"`,
+          selectedSessionId
+        );
+        continue;
+      }
 
+      // Succès (code 0) ou code inconnu (pas de canal d'observation)
       setStepStatuses((prev) => ({ ...prev, [step.id]: "success" }));
     }
 
     // Done header
-    onExecuteCommandInTerminal(
-      `echo -e "\\n\\e[1;32m[PLAYBOOK PIPELINE] ✅ Pipeline '${selectedPlaybook.name}' exécuté avec succès !\\e[0m"`,
-      selectedSessionId
-    );
+    if (isPbSuccess) {
+      onExecuteCommandInTerminal(
+        `echo -e "\\n\\e[1;32m[PLAYBOOK PIPELINE] ✅ Pipeline '${selectedPlaybook.name}' exécuté avec succès !\\e[0m"`,
+        selectedSessionId
+      );
+    } else {
+      onExecuteCommandInTerminal(
+        `echo -e "\\n\\e[1;31m[PLAYBOOK PIPELINE] ❌ Pipeline terminé avec échec(s)${failedStepTitle ? ` (${failedStepTitle})` : ""}\\e[0m"`,
+        selectedSessionId
+      );
+    }
 
     const duration = Math.floor((Date.now() - startTime) / 1000);
 
-    // Persist to history list
+    // Persist to history list (statut RÉEL, pas toujours "success")
     const newHistItem: PlaybookHistoryItem = {
       id: `h_${Date.now()}`,
       playbookId: selectedPlaybook.id,
@@ -286,7 +360,11 @@ export const PlaybookSequencer: React.FC<PlaybookSequencerProps> = ({
 
     setIsRunning(false);
     setRunningStepIndex(null);
-    showNotification("Pipeline d'automatisation terminé !");
+    showNotification(
+      isPbSuccess
+        ? "Pipeline d'automatisation terminé avec succès !"
+        : "Pipeline terminé avec des échecs (voir le terminal)."
+    );
   };
 
   // Export as Bash Script (.sh)

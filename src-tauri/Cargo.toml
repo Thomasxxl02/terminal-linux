@@ -2,7 +2,7 @@
 name = "tauri-linux-terminal"
 version = "0.1.0"
 description = "Terminal Linux Haute Performance avec Rust & Tauri"
-authors = ["AI Studio Developer <dev@aistudio.build>"]
+authors = ["Linux Terminal Emulator Contributors"]
 edition = "2021"
 
 [build-dependencies]
