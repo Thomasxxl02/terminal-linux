@@ -1,21 +1,6 @@
-import { useEffect, useState, useCallback, Suspense, useRef } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { Sidebar } from "./components/Sidebar";
-import { TerminalTabs } from "./components/TerminalTabs";
-import { TerminalView } from "./components/TerminalView";
-import {
-  LazyMaintenanceHub,
-  LazyTauriRustArchitect,
-  LazySnippetsLibrary,
-  LazySkillsHub,
-  LazySystemMonitorModal,
-  LazyProfileManager,
-  LazyPlaybookSequencer,
-  LazySshHostManager,
-  LazySshTunnelManager,
-  LazyLogsStreamer,
-  LazyWebShortcutsManager,
-  LazyMonacoFileEditor,
-} from "./components/lazy";
+import { AppViews } from "./components/AppViews";
 import { CommandPalette } from "./components/CommandPalette";
 import { TerminalSessionInfo, SystemStats, ShellProfile, SavedTabSession, SshHost } from "./types";
 import {
@@ -38,16 +23,6 @@ import {
   listPtySessionsWeb,
   tauriInvoke,
 } from "./lib/tauri";
-
-/** Fallback de chargement affiché pendant le lazy-load d'une vue. */
-function ViewFallback({ label }: { label: string }) {
-  return (
-    <div className="flex flex-col items-center justify-center h-full text-slate-400 font-mono text-xs bg-slate-950 p-6 space-y-3">
-      <div className="w-6 h-6 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin" />
-      <p>Chargement : {label}...</p>
-    </div>
-  );
-}
 
 export default function App() {
   const [activeView, setActiveView] = useState<string>("terminal");
@@ -495,203 +470,39 @@ export default function App() {
 
       {/* Main Content Area */}
       <main className="flex-1 flex flex-col h-full min-w-0 bg-slate-950 overflow-hidden">
-        {/* Render View Content */}
-        {activeView === "terminal" && (
-          <div className="flex-1 flex flex-col h-full w-full overflow-hidden">
-            <TerminalTabs
-              sessions={sessions}
-              activeSessionId={activeSessionId}
-              onSelectSession={setActiveSessionId}
-              onCreateSession={handleCreateSession}
-              onCloseSession={handleCloseSession}
-              onRefreshSessions={fetchSessions}
-              isFullscreen={isFullscreen}
-              onToggleFullscreen={() => setIsFullscreen(!isFullscreen)}
-              splitMode={splitMode}
-              setSplitMode={setSplitMode}
-              onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
-              notificationsEnabled={notificationsEnabled}
-              onRequestNotifications={handleRequestNotifications}
-            />
-
-            <div className="flex-1 w-full h-full relative overflow-hidden bg-slate-950">
-              {activeSession ? (
-                splitMode === "single" ? (
-                  <TerminalView
-                    key={activeSession.id}
-                    session={activeSession}
-                    activeThemeId={activeThemeId}
-                    onThemeChange={setActiveThemeId}
-                    fontSize={fontSize}
-                    setFontSize={setFontSize}
-                    notificationsEnabled={notificationsEnabled}
-                    onOpenMonacoFile={handleOpenMonacoFile}
-                    onOutput={handleTerminalOutput}
-                  />
-                ) : (
-                  /* Split View Container (Vertical or Horizontal) */
-                  <div
-                    className={`w-full h-full flex ${
-                      splitMode === "vertical" ? "flex-row divide-x" : "flex-col divide-y"
-                    } divide-slate-800`}
-                  >
-                    {/* Primary Pane */}
-                    <div className="flex-1 h-full min-w-0 min-h-0 relative">
-                      <TerminalView
-                        key={`primary-${activeSession.id}`}
-                        session={activeSession}
-                        activeThemeId={activeThemeId}
-                        onThemeChange={setActiveThemeId}
-                        fontSize={fontSize}
-                        setFontSize={setFontSize}
-                        notificationsEnabled={notificationsEnabled}
-                        onOpenMonacoFile={handleOpenMonacoFile}
-                        onOutput={handleTerminalOutput}
-                      />
-                    </div>
-
-                    {/* Secondary Split Pane */}
-                    <div className="flex-1 h-full min-w-0 min-h-0 relative">
-                      {secondarySession && secondarySession.id !== activeSession.id ? (
-                        <TerminalView
-                          key={`secondary-${secondarySession.id}`}
-                          session={secondarySession}
-                          activeThemeId={activeThemeId}
-                          onThemeChange={setActiveThemeId}
-                          fontSize={fontSize}
-                          setFontSize={setFontSize}
-                          notificationsEnabled={notificationsEnabled}
-                          onOpenMonacoFile={handleOpenMonacoFile}
-                          onOutput={handleTerminalOutput}
-                        />
-                      ) : (
-                        <div className="flex flex-col items-center justify-center h-full text-slate-400 p-6 bg-slate-900/40">
-                          <p className="mb-3 text-xs font-mono text-slate-400">
-                            Session secondaire non sélectionnée
-                          </p>
-                          <button
-                            onClick={handleCreateSession}
-                            className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-bold text-xs font-mono rounded transition-colors"
-                          >
-                            Ouvrir un 2ème Terminal
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )
-              ) : (
-                <div className="flex flex-col items-center justify-center h-full text-slate-400 p-6">
-                  <p className="mb-4 text-sm font-medium">Aucun terminal actif.</p>
-                  <button
-                    onClick={handleCreateSession}
-                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-bold text-xs rounded-lg transition-colors"
-                  >
-                    Ouvrir un nouveau Terminal Linux
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {activeView === "ssh" && (
-          <Suspense fallback={<ViewFallback label="Carnet SSH" />}>
-            <LazySshHostManager
-              onExecuteInTerminal={handleExecuteInTerminal}
-              onLaunchSshSession={handleLaunchSshSession}
-            />
-          </Suspense>
-        )}
-
-        {activeView === "tunnels" && (
-          <Suspense fallback={<ViewFallback label="Tunnels" />}>
-            <LazySshTunnelManager
-              onExecuteInTerminal={handleExecuteInTerminal}
-            />
-          </Suspense>
-        )}
-
-        {activeView === "profiles" && (
-          <Suspense fallback={<ViewFallback label="Profils" />}>
-            <LazyProfileManager
-              onLaunchProfile={handleLaunchProfile}
-              activeSessions={sessions}
-              onRestoreSavedTabs={handleRestoreSavedTabs}
-            />
-          </Suspense>
-        )}
-
-        {activeView === "playbooks" && (
-          <Suspense fallback={<ViewFallback label="Playbooks" />}>
-            <LazyPlaybookSequencer
-              sessions={sessions}
-              activeSessionId={activeSessionId}
-              onExecuteCommandInTerminal={handleExecuteInTerminal}
-              onOpenTerminalView={() => setActiveView("terminal")}
-              subscribeOutput={subscribeTerminalOutput}
-            />
-          </Suspense>
-        )}
-
-        {activeView === "maintenance" && (
-          <Suspense fallback={<ViewFallback label="Maintenance" />}>
-            <LazyMaintenanceHub
-              sessions={sessions}
-              activeSessionId={activeSessionId}
-              onExecuteInTerminal={handleExecuteInTerminal}
-            />
-          </Suspense>
-        )}
-
-        {activeView === "monaco" && (
-          <Suspense fallback={<ViewFallback label="Éditeur Monaco" />}>
-            <LazyMonacoFileEditor
-              onExecuteInTerminal={handleExecuteInTerminal}
-              initialFilePath={monacoFilePath}
-            />
-          </Suspense>
-        )}
-
-        {activeView === "logs" && (
-          <Suspense fallback={<ViewFallback label="Logs" />}>
-            <LazyLogsStreamer />
-          </Suspense>
-        )}
-
-        {activeView === "tauri" && (
-          <Suspense fallback={<ViewFallback label="Architecture Rust" />}>
-            <LazyTauriRustArchitect />
-          </Suspense>
-        )}
-
-        {activeView === "skills" && (
-          <Suspense fallback={<ViewFallback label="Skills" />}>
-            <LazySkillsHub onExecuteInTerminal={handleExecuteInTerminal} />
-          </Suspense>
-        )}
-
-        {activeView === "snippets" && (
-          <Suspense fallback={<ViewFallback label="Snippets" />}>
-            <LazySnippetsLibrary onExecuteInTerminal={handleExecuteInTerminal} />
-          </Suspense>
-        )}
-
-        {activeView === "bookmarks" && (
-          <Suspense fallback={<ViewFallback label="Raccourcis Web" />}>
-            <LazyWebShortcutsManager
-              onExecuteInTerminal={handleExecuteInTerminal}
-              sessions={sessions}
-              activeSessionId={activeSessionId}
-            />
-          </Suspense>
-        )}
-
-        {activeView === "stats" && (
-          <Suspense fallback={<ViewFallback label="Ressources" />}>
-            <LazySystemMonitorModal stats={systemStats} onRefresh={fetchSystemStats} />
-          </Suspense>
-        )}
+        <AppViews
+          activeView={activeView}
+          sessions={sessions}
+          activeSessionId={activeSessionId}
+          activeSession={activeSession}
+          secondarySession={secondarySession}
+          splitMode={splitMode}
+          isFullscreen={isFullscreen}
+          notificationsEnabled={notificationsEnabled}
+          fontSize={fontSize}
+          activeThemeId={activeThemeId}
+          monacoFilePath={monacoFilePath}
+          systemStats={systemStats}
+          onSelectSession={setActiveSessionId}
+          onCreateSession={handleCreateSession}
+          onCloseSession={handleCloseSession}
+          onRefreshSessions={fetchSessions}
+          onToggleFullscreen={() => setIsFullscreen(!isFullscreen)}
+          onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
+          onRequestNotifications={handleRequestNotifications}
+          onThemeChange={setActiveThemeId}
+          setFontSize={setFontSize}
+          onSetSplitMode={setSplitMode}
+          onOpenMonacoFile={handleOpenMonacoFile}
+          onTerminalOutput={handleTerminalOutput}
+          onExecuteInTerminal={handleExecuteInTerminal}
+          onLaunchSshSession={handleLaunchSshSession}
+          onLaunchProfile={handleLaunchProfile}
+          onRestoreSavedTabs={handleRestoreSavedTabs}
+          onOpenTerminalView={() => setActiveView("terminal")}
+          subscribeOutput={subscribeTerminalOutput}
+          onRefreshStats={fetchSystemStats}
+        />
       </main>
     </div>
   );
