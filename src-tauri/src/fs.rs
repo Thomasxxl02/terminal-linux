@@ -169,6 +169,10 @@ pub struct LogTail {
 #[tauri::command]
 pub fn fs_write(path: String, content: String, encoding: Option<String>) -> Result<(), String> {
     let p = PathBuf::from(&path);
+    // Garde-fou : jamais d'écrasement d'un fichier système critique.
+    if is_critical_system_file(&p) {
+        return Err("Écriture refusée : fichier système critique".into());
+    }
     // Le parent doit exister (pas de création silencieuse de dossiers)
     if let Some(parent) = p.parent() {
         if !parent.as_os_str().is_empty() && !parent.exists() {
@@ -202,11 +206,65 @@ pub fn fs_create_directory(path: String) -> Result<(), String> {
     fs::create_dir_all(&p).map_err(|e| e.to_string())
 }
 
+/// Chemins système dont la SUPPRESSION ou le RENOMMAGE est interdit,
+/// y compris tous leurs sous-dossiers. Évite qu'un mauvais chemin (bug
+/// UI, faute de frappe, frontend compromis) ne supprime la machine.
+const PROTECTED_PREFIXES: &[&str] = &[
+    "/etc", "/usr", "/bin", "/sbin", "/boot", "/dev", "/proc", "/sys",
+    "/lib", "/lib64", "/var", "/snap",
+];
+/// Racines protégées uniquement pour elles-mêmes (les enfants restent
+/// manipulables : /home/user est supprimable, /home ne l'est pas).
+const PROTECTED_EXACT: &[&str] = &["/", "/home", "/root", "/media", "/mnt"];
+
+fn is_protected_path(p: &std::path::Path) -> bool {
+    // Résout les `..` et les symlinks (quand le chemin existe)
+    let resolved = p.canonicalize().unwrap_or_else(|_| p.to_path_buf());
+    let s = resolved.to_string_lossy();
+    for prefix in PROTECTED_PREFIXES {
+        if s == *prefix || s.starts_with(&format!("{}/", prefix)) {
+            return true;
+        }
+    }
+    for exact in PROTECTED_EXACT {
+        if s == *exact {
+            return true;
+        }
+    }
+    // Le home utilisateur lui-même (pas ses enfants)
+    if let Ok(home) = std::env::var("HOME") {
+        if !home.is_empty() && s == home {
+            return true;
+        }
+    }
+    false
+}
+
+/// Fichiers CRITIQUES dont l'ÉCRASEMENT est interdit (même admin) :
+/// les écraser verrouillerait la machine (passwd/shadow/sudoers) ou
+/// casserait la confiance (clés host SSH). Miroir du backend web.
+const CRITICAL_FILES: &[&str] = &[
+    "/etc/passwd", "/etc/shadow", "/etc/group", "/etc/gshadow",
+    "/etc/sudoers", "/etc/sudoers.d", "/etc/fstab", "/etc/crypttab",
+    "/etc/ssh/ssh_host_rsa_key", "/etc/ssh/ssh_host_ed25519_key",
+    "/etc/ssh/ssh_host_ecdsa_key", "/etc/ssh/sshd_config",
+];
+
+fn is_critical_system_file(p: &std::path::Path) -> bool {
+    let resolved = p.canonicalize().unwrap_or_else(|_| p.to_path_buf());
+    let s = resolved.to_string_lossy();
+    CRITICAL_FILES.iter().any(|c| s == *c || s.starts_with(&format!("{}/", c)))
+}
+
 #[tauri::command]
 pub fn fs_delete(path: String) -> Result<(), String> {
     let p = PathBuf::from(&path);
     if !p.exists() {
         return Err("Élément introuvable".into());
+    }
+    // Garde-fou : ne jamais supprimer un chemin système critique.
+    if is_protected_path(&p) {
+        return Err("Suppression refusée : chemin système protégé".into());
     }
     if p.is_dir() {
         fs::remove_dir_all(&p).map_err(|e| e.to_string())?;
@@ -222,6 +280,10 @@ pub fn fs_rename(old_path: String, new_path: String) -> Result<(), String> {
     let new_p = PathBuf::from(&new_path);
     if !old_p.exists() {
         return Err("Source introuvable".into());
+    }
+    // Garde-fou : pas de renommage d'un chemin système critique.
+    if is_protected_path(&old_p) {
+        return Err("Renommage refusé : chemin système protégé".into());
     }
     if new_p.exists() {
         return Err("La destination existe déjà".into());
@@ -362,5 +424,61 @@ mod tests {
     fn tail_log_file_refuse_un_dossier() {
         let err = tail_log_file(std::env::temp_dir().to_string_lossy().to_string(), None).unwrap_err();
         assert!(err.contains("dossier"));
+    }
+
+    // ── Garde-fous des chemins destructifs (fs_delete / fs_rename) ──
+
+    #[test]
+    fn is_protected_path_refuse_la_racine() {
+        assert!(is_protected_path(std::path::Path::new("/")));
+    }
+
+    #[test]
+    fn is_protected_path_refuse_etc_et_ses_sous_chemins() {
+        assert!(is_protected_path(std::path::Path::new("/etc")));
+        assert!(is_protected_path(std::path::Path::new("/etc/passwd")));
+        assert!(is_protected_path(std::path::Path::new("/usr/bin")));
+    }
+
+    #[test]
+    fn is_protected_path_refuse_le_home_mais_pas_ses_enfants() {
+        let home = std::env::var("HOME").unwrap_or_else(|_| "/root".into());
+        assert!(is_protected_path(std::path::Path::new(&home)));
+        // Un sous-dossier du home reste manipulable
+        let child = std::path::Path::new(&home).join("mon-projet");
+        assert!(!is_protected_path(&child));
+    }
+
+    #[test]
+    fn fs_delete_refuse_un_chemin_systeme() {
+        let err = fs_delete("/etc/passwd".into()).unwrap_err();
+        assert!(err.contains("protégé"));
+    }
+
+    #[test]
+    fn fs_delete_fonctionne_sur_un_fichier_temporaire() {
+        let path = temp_log("del", "contenu");
+        fs_delete(path.to_string_lossy().to_string()).unwrap();
+        assert!(!path.exists());
+    }
+
+    #[test]
+    fn fs_rename_refuse_un_chemin_systeme() {
+        let err = fs_rename("/etc/passwd".into(), "/tmp/passwd-move".into()).unwrap_err();
+        assert!(err.contains("protégé"));
+    }
+
+    #[test]
+    fn fs_write_refuse_un_fichier_critique() {
+        let err = fs_write("/etc/passwd".into(), "hacked".into(), None).unwrap_err();
+        assert!(err.contains("critique"));
+    }
+
+    #[test]
+    fn fs_write_fonctionne_sur_un_fichier_normal() {
+        let path = temp_log("write", "old");
+        fs_write(path.to_string_lossy().to_string(), "nouveau contenu".into(), None).unwrap();
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "nouveau contenu");
+        std::fs::remove_file(&path).ok();
     }
 }

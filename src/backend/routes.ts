@@ -11,6 +11,8 @@ import {
 import {
   errMsg,
   getSafePath,
+  isProtectedSystemPath,
+  isCriticalSystemFile,
   validateString,
   validateOptionalString,
   validatePositiveInteger,
@@ -435,6 +437,11 @@ router.get("/fs/read", async (req, res) => {
 router.post("/fs/write", writeLimiter, async (req, res) => {
   try {
     const { path: filePath, content, encoding } = req.body;
+    // Garde-fou sur le chemin BRUT : jamais d'écrasement d'un fichier
+    // critique (passwd/shadow/sudoers/clés host SSH…), même admin.
+    if (typeof filePath === "string" && isCriticalSystemFile(filePath)) {
+      return res.status(403).json({ error: "Écriture refusée : fichier système critique" });
+    }
     const safeFile = getSafePath(filePath);
 
     const validatedContent = validateString(content, "content");
@@ -485,6 +492,11 @@ router.post("/fs/create-directory", writeLimiter, async (req, res) => {
 router.post("/fs/delete", writeLimiter, async (req, res) => {
   try {
     const { path: itemPath } = req.body;
+    // Garde-fou sur le chemin BRUT (getSafePath transformerait /etc/…
+    // en chemin du workspace et masquerait la cible réelle).
+    if (typeof itemPath === "string" && isProtectedSystemPath(itemPath)) {
+      return res.status(403).json({ error: "Suppression refusée : chemin système protégé" });
+    }
     const safeItem = getSafePath(itemPath);
     if (!fs.existsSync(safeItem)) return res.status(404).json({ error: "Élément introuvable" });
 
@@ -508,6 +520,10 @@ router.post("/fs/delete", writeLimiter, async (req, res) => {
 router.post("/fs/rename", writeLimiter, async (req, res) => {
   try {
     const { oldPath, newPath } = req.body;
+    // Garde-fou sur le chemin BRUT (avant getSafePath)
+    if (typeof oldPath === "string" && isProtectedSystemPath(oldPath)) {
+      return res.status(403).json({ error: "Renommage refusé : chemin système protégé" });
+    }
     const safeOld = getSafePath(oldPath);
     const safeNew = getSafePath(newPath);
     if (!fs.existsSync(safeOld)) return res.status(404).json({ error: "Source introuvable" });

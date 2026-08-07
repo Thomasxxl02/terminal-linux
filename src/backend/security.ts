@@ -1,4 +1,5 @@
 import path from "path";
+import fs from "fs";
 
 /**
  * Extrait un message d'erreur lisible depuis une valeur inconnue
@@ -12,6 +13,65 @@ export function errMsg(err: unknown): string {
   } catch {
     return "Erreur inconnue";
   }
+}
+
+/**
+ * Garde-fou de SÛRETÉ (indépendant du rôle) : ces chemins système ne
+ * doivent JAMAIS être supprimés ou renommés, même par un admin. Évite
+ * qu'un bug UI ou une faute de frappe ne supprime la machine.
+ * Miroir de la protection Rust (src-tauri/src/fs.rs).
+ */
+export function isProtectedSystemPath(targetPath: string): boolean {
+  const PROTECTED_PREFIXES = [
+    "/etc", "/usr", "/bin", "/sbin", "/boot", "/dev", "/proc", "/sys",
+    "/lib", "/lib64", "/var", "/snap",
+  ];
+  const PROTECTED_EXACT = ["/", "/home", "/root", "/media", "/mnt"];
+
+  let resolved = path.normalize(targetPath);
+  try {
+    resolved = fs.realpathSync(targetPath);
+  } catch {
+    // Le chemin n'existe pas : on garde la version normalisée
+  }
+  for (const prefix of PROTECTED_PREFIXES) {
+    if (resolved === prefix || resolved.startsWith(prefix + "/")) {
+      return true;
+    }
+  }
+  if (PROTECTED_EXACT.includes(resolved)) return true;
+  const home = process.env.HOME;
+  if (home && resolved === path.normalize(home)) return true;
+  return false;
+}
+
+/**
+ * Fichiers CRITIQUES dont l'ÉCRASEMENT est interdit (même admin) : les
+ * écraser verrouillerait la machine (passwd/shadow/sudoers) ou casserait
+ * la confiance (clés host SSH, kernels boot). Les fichiers de config
+ * classiques (nginx.conf, fstab…) restent éditables — seuls ces cas
+ * irrécupérables sont bloqués.
+ */
+const CRITICAL_FILES = [
+  "/etc/passwd", "/etc/shadow", "/etc/group", "/etc/gshadow",
+  "/etc/sudoers", "/etc/sudoers.d", "/etc/fstab", "/etc/crypttab",
+  "/etc/ssh/ssh_host_rsa_key", "/etc/ssh/ssh_host_ed25519_key",
+  "/etc/ssh/ssh_host_ecdsa_key", "/etc/ssh/sshd_config",
+];
+
+export function isCriticalSystemFile(targetPath: string): boolean {
+  let resolved = path.normalize(targetPath);
+  try {
+    resolved = fs.realpathSync(targetPath);
+  } catch {
+    // Le chemin n'existe pas : on garde la version normalisée
+  }
+  for (const critical of CRITICAL_FILES) {
+    if (resolved === critical || resolved.startsWith(critical + "/")) {
+      return true;
+    }
+  }
+  return false;
 }
 
 /**

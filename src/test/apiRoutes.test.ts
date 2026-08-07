@@ -122,6 +122,61 @@ describe("Routes FS — cycle de vie complet (tree → read → write → rename
   });
 });
 
+describe("Sécurité — injections de chemins et garde-fous système", () => {
+  it("GET /api/fs/read bloque la traversée ../", async () => {
+    const res = await request(app).get("/api/fs/read").query({ path: "../../etc/passwd" });
+    expect(res.status).toBe(500); // hors workspace → refusé par getSafePath
+  });
+
+  it("POST /api/fs/delete refuse la suppression d'un chemin système protégé", async () => {
+    const res = await request(app).post("/api/fs/delete").send({ path: "/etc/passwd" });
+    expect(res.status).toBe(403);
+    expect(res.body.error).toContain("protégé");
+  });
+
+  it("POST /api/fs/delete refuse /etc entier (même non-critique)", async () => {
+    const res = await request(app).post("/api/fs/delete").send({ path: "/etc" });
+    expect(res.status).toBe(403);
+  });
+
+  it("POST /api/fs/rename refuse le renommage d'un chemin système", async () => {
+    const res = await request(app).post("/api/fs/rename").send({
+      oldPath: "/etc/passwd",
+      newPath: "/tmp/passwd-volé",
+    });
+    expect(res.status).toBe(403);
+    expect(res.body.error).toContain("protégé");
+  });
+
+  it("POST /api/fs/write refuse l'écrasement d'un fichier critique (passwd)", async () => {
+    const res = await request(app).post("/api/fs/write").send({
+      path: "/etc/passwd",
+      content: "hacked",
+    });
+    expect(res.status).toBe(403);
+    expect(res.body.error).toContain("critique");
+  });
+
+  it("POST /api/fs/write refuse une clé host SSH", async () => {
+    const res = await request(app).post("/api/fs/write").send({
+      path: "/etc/ssh/ssh_host_ed25519_key",
+      content: "clé compromise",
+    });
+    expect(res.status).toBe(403);
+  });
+
+  it("POST /api/fs/write accepte une config classique (nginx.conf reste éditable)", async () => {
+    // Le chemin n'existe pas → le write échouerait en 500, mais le
+    // GARDE-FOU ne doit pas le bloquer (pas un fichier critique) : on
+    // vérifie qu'on n'obtient PAS 403.
+    const res = await request(app).post("/api/fs/write").send({
+      path: "/etc/nginx/nginx.conf",
+      content: "server {}",
+    });
+    expect(res.status).not.toBe(403);
+  });
+});
+
 describe("Routes réseau / shells / source", () => {
   it("GET /api/network/port-check valide un port réellement libre", async () => {
     const res = await request(app).get("/api/network/port-check").query({ port: 39999 });

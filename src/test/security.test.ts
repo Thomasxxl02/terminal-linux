@@ -4,6 +4,7 @@ import {
   errMsg,
   getSafePath,
   getSafeLogPath,
+  isProtectedSystemPath,
   validateString,
   validateOptionalString,
   validateInteger,
@@ -106,6 +107,34 @@ describe("security.validateInteger / validatePositiveInteger", () => {
     expect(validatePositiveInteger(10, "port")).toBe(10);
     expect(() => validatePositiveInteger(0, "port")).toThrow("entier positif");
     expect(() => validatePositiveInteger(-5, "port")).toThrow("entier positif");
+  });
+});
+
+describe("security.isProtectedSystemPath (garde-fou de sûreté)", () => {
+  it("protège la racine et les chemins système", () => {
+    expect(isProtectedSystemPath("/")).toBe(true);
+    expect(isProtectedSystemPath("/etc")).toBe(true);
+    expect(isProtectedSystemPath("/etc/passwd")).toBe(true);
+    expect(isProtectedSystemPath("/usr/bin")).toBe(true);
+    expect(isProtectedSystemPath("/var/log")).toBe(true);
+    expect(isProtectedSystemPath("/boot/vmlinuz")).toBe(true);
+  });
+
+  it("protège le home lui-même mais pas ses enfants", () => {
+    const home = process.env.HOME || "/root";
+    expect(isProtectedSystemPath(home)).toBe(true);
+    // Un sous-dossier du home reste manipulable
+    expect(isProtectedSystemPath(`${home}/mon-projet`)).toBe(false);
+  });
+
+  it("laisse passer un chemin utilisateur normal", () => {
+    expect(isProtectedSystemPath("/tmp")).toBe(false);
+    expect(isProtectedSystemPath(`${process.env.HOME || "/root"}/terminal-linux/src`)).toBe(false);
+  });
+
+  it("normalise les .. avant vérification", () => {
+    // /etc/../etc/passwd normalise vers /etc/passwd → protégé
+    expect(isProtectedSystemPath("/etc/../etc/passwd")).toBe(true);
   });
 });
 
