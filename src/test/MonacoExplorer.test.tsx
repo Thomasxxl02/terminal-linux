@@ -1,5 +1,5 @@
 import React from "react";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, within } from "@testing-library/react";
 import { describe, it, expect, vi } from "vitest";
 import { MonacoExplorer, getDisplayPath } from "../components/MonacoExplorer";
 import { FileTreeItem } from "../types";
@@ -120,6 +120,54 @@ describe("MonacoExplorer", () => {
     // Le dernier est le bouton de confirmation du panneau (l'icône vient avant)
     fireEvent.click(deleteButtons[deleteButtons.length - 1]);
     expect(props.onConfirmDelete).toHaveBeenCalled();
+  });
+
+  it("ouvre le formulaire de renommage avec le nom pré-rempli", () => {
+    const props = renderExplorer({});
+    fireEvent.click(screen.getAllByTitle("Renommer")[0]);
+
+    expect(props.onSetRenamingPath).toHaveBeenCalledWith("/projet/src/main.rs");
+    expect(props.onSetRenameName).toHaveBeenCalledWith("main.rs");
+  });
+
+  it("confirme le renommage avec Entrée et le nouveau nom", () => {
+    const props = renderExplorer({
+      renamingPath: "/projet/src/main.rs",
+      renameName: "main2.rs",
+    });
+    const input = screen.getByDisplayValue("main2.rs");
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    expect(props.onConfirmRename).toHaveBeenCalledWith(
+      expect.objectContaining({ path: "/projet/src/main.rs", name: "main.rs" })
+    );
+  });
+
+  it("annule le renommage avec Échap", () => {
+    const props = renderExplorer({
+      renamingPath: "/projet/src/main.rs",
+      renameName: "main2.rs",
+    });
+    const input = screen.getByDisplayValue("main2.rs");
+    fireEvent.keyDown(input, { key: "Escape" });
+
+    expect(props.onSetRenamingPath).toHaveBeenCalledWith(null);
+  });
+
+  it("annule le renommage via le bouton X", () => {
+    const props = renderExplorer({
+      renamingPath: "/projet/src/main.rs",
+      renameName: "main2.rs",
+    });
+    // Le bouton X est dans la barre de renommage qui contient l'input
+    const input = screen.getByDisplayValue("main2.rs");
+    const renameBar = input.closest("div");
+    expect(renameBar).not.toBeNull();
+    const barButtons = within(renameBar as HTMLElement).getAllByRole("button");
+    // Check (0) puis X (1)
+    fireEvent.click(barButtons[1]);
+
+    expect(props.onSetRenamingPath).toHaveBeenCalledWith(null);
   });
 });
 

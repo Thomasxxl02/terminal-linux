@@ -555,6 +555,7 @@ export const WebShortcutsManager: React.FC<WebShortcutsManagerProps> = ({
                       <Tooltip content="Éditer le raccourci" position="top">
                         <button
                           onClick={() => handleOpenEditModal(sc)}
+                          aria-label={`Éditer ${sc.title}`}
                           className="p-1.5 text-slate-400 hover:text-slate-200 hover:bg-slate-800 rounded transition-colors"
                         >
                           <Edit2 className="w-3.5 h-3.5" />
@@ -564,6 +565,7 @@ export const WebShortcutsManager: React.FC<WebShortcutsManagerProps> = ({
                       <Tooltip content="Supprimer ce raccourci" position="top">
                         <button
                           onClick={() => handleDeleteShortcut(sc.id)}
+                          aria-label={`Supprimer ${sc.title}`}
                           className="p-1.5 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded transition-colors"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
