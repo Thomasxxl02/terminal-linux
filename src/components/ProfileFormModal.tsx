@@ -163,6 +163,7 @@ export function ProfileFormModal({
                     type="button"
                     onClick={() => setEnvPairs(envPairs.filter((_, i) => i !== idx))}
                     className="text-slate-500 hover:text-red-400 p-1"
+                    aria-label={`Retirer la variable ${idx + 1}`}
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>

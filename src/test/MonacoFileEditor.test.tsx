@@ -328,4 +328,134 @@ describe("MonacoFileEditor Component", () => {
     // deploy.sh reste ouvert
     expect(screen.getByTitle("/workspace/deploy.sh")).toBeInTheDocument();
   });
+
+  it("enregistre un fichier modifié (fs/write avec le contenu réel)", async () => {
+    await act(async () => {
+      render(<MonacoFileEditor onExecuteInTerminal={mockExecuteInTerminal} />);
+    });
+
+    await waitFor(() => expect(screen.getByText("app.ts")).toBeInTheDocument());
+    await act(async () => {
+      fireEvent.click(screen.getByText("app.ts"));
+    });
+    await waitFor(() => expect(screen.getByTestId("monaco-editor-mock")).toBeInTheDocument());
+
+    // Modifier le contenu → l'onglet devient "dirty"
+    await act(async () => {
+      fireEvent.change(screen.getByTestId("monaco-editor-mock"), {
+        target: { value: "console.log('modifié');" },
+      });
+    });
+
+    // Le bouton Enregistrer devient actif et écrit le contenu réel
+    await act(async () => {
+      fireEvent.click(screen.getByText("Sauvegarder"));
+    });
+
+    await waitFor(() => {
+      const posts = (global.fetch as ReturnType<typeof vi.fn>).mock.calls.filter(
+        ([url]: [string, RequestInit]) => String(url).includes("/api/fs/write")
+      );
+      expect(posts.length).toBeGreaterThan(0);
+      const body = JSON.parse(String((posts[0][1] as RequestInit).body));
+      expect(body.path).toBe("/workspace/app.ts");
+      expect(body.content).toBe("console.log('modifié');");
+    });
+  });
+
+  it("enregistre tous les onglets modifiés (Enregistrer tout)", async () => {
+    await act(async () => {
+      render(<MonacoFileEditor onExecuteInTerminal={mockExecuteInTerminal} />);
+    });
+
+    // Ouvrir 2 fichiers
+    await waitFor(() => expect(screen.getByText("app.ts")).toBeInTheDocument());
+    await act(async () => {
+      fireEvent.click(screen.getByText("app.ts"));
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByText("deploy.sh"));
+    });
+    await waitFor(() => expect(screen.getByTestId("monaco-editor-mock")).toBeInTheDocument());
+
+    // Modifier les 2 fichiers (le 2e est actif, le 1er reste dirty)
+    await act(async () => {
+      fireEvent.change(screen.getByTestId("monaco-editor-mock"), {
+        target: { value: "#!/bin/bash\necho modifié" },
+      });
+    });
+    fireEvent.click(screen.getByTitle("/workspace/app.ts"));
+    await act(async () => {
+      fireEvent.change(screen.getByTestId("monaco-editor-mock"), {
+        target: { value: "console.log('a');" },
+      });
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByText("Tout sauver"));
+    });
+
+    await waitFor(() => {
+      const posts = (global.fetch as ReturnType<typeof vi.fn>).mock.calls.filter(
+        ([url]: [string, RequestInit]) => String(url).includes("/api/fs/write")
+      );
+      // 2 écritures : deploy.sh puis app.ts
+      expect(posts.length).toBe(2);
+      const paths = posts.map(([, init]: [string, RequestInit]) =>
+        JSON.parse(String((init as RequestInit).body)).path
+      );
+      expect(paths).toContain("/workspace/app.ts");
+      expect(paths).toContain("/workspace/deploy.sh");
+    });
+  });
+
+  it("crée un fichier via l'explorateur (fs/create-file)", async () => {
+    await act(async () => {
+      render(<MonacoFileEditor onExecuteInTerminal={mockExecuteInTerminal} />);
+    });
+    await waitFor(() => expect(screen.getByText("package.json")).toBeInTheDocument());
+
+    // Nouveau fichier → formulaire inline → saisie → Enter
+    fireEvent.click(screen.getByTitle("Nouveau fichier"));
+    const nameInput = screen.getByPlaceholderText("index.html");
+    await act(async () => {
+      fireEvent.change(nameInput, { target: { value: "test.txt" } });
+      fireEvent.keyDown(nameInput, { key: "Enter" });
+    });
+
+    await waitFor(() => {
+      const posts = (global.fetch as ReturnType<typeof vi.fn>).mock.calls.filter(
+        ([url, init]: [string, RequestInit]) =>
+          String(url).includes("/api/fs/create-file") && init?.method === "POST"
+      );
+      expect(posts.length).toBeGreaterThan(0);
+      const body = JSON.parse(String((posts[0][1] as RequestInit).body));
+      expect(body.path).toBe("/workspace/test.txt");
+    });
+  });
+
+  it("supprime un fichier après confirmation (fs/delete)", async () => {
+    await act(async () => {
+      render(<MonacoFileEditor onExecuteInTerminal={mockExecuteInTerminal} />);
+    });
+    await waitFor(() => expect(screen.getByText("package.json")).toBeInTheDocument());
+
+    // Bouton Supprimer de l'item package.json (group hover, cliquable en jsdom)
+    fireEvent.click(screen.getAllByTitle("Supprimer")[0]);
+    expect(screen.getByText("Supprimer définitivement ?")).toBeInTheDocument();
+
+    await act(async () => {
+      fireEvent.click(screen.getAllByText("Supprimer")[0]);
+    });
+
+    await waitFor(() => {
+      const dels = (global.fetch as ReturnType<typeof vi.fn>).mock.calls.filter(
+        ([url, init]: [string, RequestInit]) =>
+          String(url).includes("/api/fs/delete") && init?.method === "POST"
+      );
+      expect(dels.length).toBeGreaterThan(0);
+      const body = JSON.parse(String((dels[0][1] as RequestInit).body));
+      expect(body.path).toBe("/workspace/package.json");
+    });
+  });
 });
