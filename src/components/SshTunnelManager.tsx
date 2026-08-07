@@ -10,7 +10,6 @@ import {
   Square,
   Activity,
   Wifi,
-  RefreshCw,
   AlertCircle,
   Search,
   Monitor,
@@ -74,14 +73,6 @@ export const SshTunnelManager: React.FC<SshTunnelManagerProps> = ({
 
   const getHostDetails = (hostId: string): SshHost | undefined => {
     return hosts.find((h) => h.id === hostId);
-  };
-
-  const formatBytes = (bytes?: number): string => {
-    if (bytes === undefined || bytes === 0) return "0 B";
-    const k = 1024;
-    const sizes = ["B", "KB", "MB", "GB"];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
   };
 
   const generateTunnelCommand = (t: SshTunnel): string => {
@@ -421,19 +412,19 @@ export const SshTunnelManager: React.FC<SshTunnelManagerProps> = ({
                 </div>
               </div>
 
-              {/* Real-time Bandwidth Sparkline Chart (Only shown if active) */}
+              {/* État du tunnel marqué actif — AUCUNE mesure de trafic ou de
+                  latence n'existe localement (le tunnel vit dans la session
+                  SSH). Affichage honnête, jamais de métrique inventée. */}
               {isTActive ? (
                 <div className="my-2.5 p-2 bg-slate-950/40 rounded-lg border border-slate-800/40 space-y-2">
                   <div className="flex justify-between text-[10px] font-mono text-slate-400">
                     <span className="flex items-center gap-1">
                       <Wifi className="w-3 h-3 text-emerald-400" />
-                      Tx: {formatBytes(tunnel.trafficSent)}
+                      Marqué actif
                     </span>
-                    <span className="flex items-center gap-1">
-                      <RefreshCw className="w-3 h-3 text-blue-400 animate-spin" />
-                      Rx: {formatBytes(tunnel.trafficReceived)}
+                    <span className="text-slate-500">
+                      Aucune mesure de trafic locale (diagnostic : vérifie le port réellement)
                     </span>
-                    <span>{tunnel.latency || 22}ms</span>
                   </div>
                 </div>
               ) : (

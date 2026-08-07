@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { SshHostManager } from '../components/SshHostManager';
 
@@ -11,13 +11,15 @@ describe('SshHostManager Component', () => {
     window.localStorage.clear();
   });
 
-  it("renders SSH host manager header (liste vide au depart - plus d hotes fictifs)", () => {
-    render(
-      <SshHostManager
-        onExecuteInTerminal={mockOnExecuteInTerminal}
-        onLaunchSshSession={mockOnLaunchSshSession}
-      />
-    );
+  it("renders SSH host manager header (liste vide au depart - plus d hotes fictifs)", async () => {
+    await act(async () => {
+      render(
+        <SshHostManager
+          onExecuteInTerminal={mockOnExecuteInTerminal}
+          onLaunchSshSession={mockOnLaunchSshSession}
+        />
+      );
+    });
 
     expect(screen.getByText(/Carnet de Connexions SSH & Tunnels Distants/i)).toBeInTheDocument();
     // Aucun hôte fictif pré-rempli (les données inventées ont été supprimées)
