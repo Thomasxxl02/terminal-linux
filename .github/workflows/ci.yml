@@ -41,11 +41,15 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
+            ~/.cargo/bin
             src-tauri/target
           key: cargo-${{ hashFiles('src-tauri/Cargo.lock') }}
 
       - name: Dépendances système (keyring → libsecret)
         run: sudo apt-get update && sudo apt-get install -y libsecret-1-dev pkg-config
+
+      - name: Installer cargo-audit (non préinstallé sur le runner)
+        run: cargo install cargo-audit --locked || test -x ~/.cargo/bin/cargo-audit
 
       - name: npm ci
         run: npm ci
