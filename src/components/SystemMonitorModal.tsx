@@ -105,7 +105,24 @@ const SystemMonitorModalInner: React.FC<SystemMonitorModalProps> = ({
   onRefresh,
 }) => {
   const [activeTab, setActiveTab] = useState<"overview" | "network" | "node" | "hardware" | "processes">("overview");
-  const [history, setHistory] = useState<{ cpu: number; mem: number; time: string }[]>([]);
+  // Historique PERSISTANT : les échantillons réels (polling 4 s) sont
+  // conservés entre les ouvertures du panneau (localStorage, données non
+  // sensibles — aucun point inventé, uniquement des mesures réelles).
+  const HISTORY_KEY = "terminal_system_history";
+  const MAX_HISTORY = 120; // ~8 minutes de mesures à 4 s
+  const [history, setHistory] = useState<{ cpu: number; mem: number; time: string }[]>(() => {
+    try {
+      const saved = typeof window !== "undefined" ? localStorage.getItem(HISTORY_KEY) : null;
+      if (saved) {
+        const parsed = JSON.parse(saved) as { cpu: number; mem: number; time: string }[];
+        if (Array.isArray(parsed)) return parsed.slice(-MAX_HISTORY);
+      }
+    } catch {
+      // localStorage illisible → on repart d'un historique vide (jamais de
+      // données inventées pour combler)
+    }
+    return [];
+  });
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [copiedReport, setCopiedReport] = useState(false);
   // (filterQuery/sortField/sortAsc/selectedPidToKill/killMessage/
@@ -121,10 +138,14 @@ const SystemMonitorModalInner: React.FC<SystemMonitorModalProps> = ({
 
       setHistory((prev) => {
         const next = [...prev, { cpu: approxCpu, mem: stats.memUsagePercent, time: timeStr }];
-        if (next.length > 20) {
-          return next.slice(1);
+        const bounded = next.length > MAX_HISTORY ? next.slice(next.length - MAX_HISTORY) : next;
+        // Persistance (best-effort : une erreur de quota ne casse pas le panneau)
+        try {
+          localStorage.setItem(HISTORY_KEY, JSON.stringify(bounded));
+        } catch {
+          // quota dépassé → l'historique reste en mémoire pour la session
         }
-        return next;
+        return bounded;
       });
     }
   }, [stats]);

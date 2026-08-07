@@ -1,10 +1,14 @@
-import { render, screen, fireEvent } from '@testing-library/react';
-import { describe, it, expect, vi } from 'vitest';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { SystemMonitorModal } from '../components/SystemMonitorModal';
 import { SystemStats } from '../types';
 
 describe('SystemMonitorModal Component', () => {
   const mockOnRefresh = vi.fn();
+
+  beforeEach(() => {
+    window.localStorage.clear();
+  });
   
   const mockStats: SystemStats = {
     platform: 'linux',
@@ -57,5 +61,38 @@ describe('SystemMonitorModal Component', () => {
     // Node should be there, bash should be filtered out
     expect(screen.getByText('node server.ts')).toBeInTheDocument();
     expect(screen.queryByText('bash')).not.toBeInTheDocument();
+  });
+
+  it('charge l\'historique persistant depuis localStorage au montage', () => {
+    // 3 échantillons réels d\'une session précédente
+    window.localStorage.setItem(
+      'terminal_system_history',
+      JSON.stringify([
+        { cpu: 10, mem: 30, time: '10:00:01' },
+        { cpu: 15, mem: 32, time: '10:00:05' },
+        { cpu: 12, mem: 31, time: '10:00:09' },
+      ])
+    );
+
+    render(<SystemMonitorModal stats={mockStats} onRefresh={mockOnRefresh} />);
+
+    // L'historique chargé est visible (points persistés affichés)
+    // — 2 graphiques (CPU + MEM) chacun avec son compteur ; le useEffect
+    // ajoute un point (3 chargés + 1 reçu) → compteur 4
+    expect(screen.getAllByText(/4 pts/i).length).toBeGreaterThan(0);
+  });
+
+  it('persiste les nouveaux échantillons dans localStorage', async () => {
+    render(<SystemMonitorModal stats={mockStats} onRefresh={mockOnRefresh} />);
+
+    // Le polling ajoute un point (stats reçues) → écrit dans localStorage
+    await waitFor(() => {
+      const saved = window.localStorage.getItem('terminal_system_history');
+      expect(saved).not.toBeNull();
+      const parsed = JSON.parse(saved ?? '[]') as { cpu: number; mem: number }[];
+      expect(parsed.length).toBeGreaterThan(0);
+      // Les valeurs sont les mesures réelles (CPU ~37 % pour 1.5/4 cores, mem 50 %)
+      expect(parsed[0].mem).toBe(50);
+    });
   });
 });
