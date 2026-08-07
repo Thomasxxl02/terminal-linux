@@ -86,17 +86,6 @@ export default function App() {
     }
   }, [notificationsEnabled]);
 
-  // Keyboard shortcut listener for Ctrl+Shift+P
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === "P" || e.key === "p")) {
-        e.preventDefault();
-        setIsCommandPaletteOpen((prev) => !prev);
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, []);
 
   // Fetch PTY sessions list from server
   const fetchSessions = useCallback(async () => {
@@ -301,6 +290,30 @@ export default function App() {
       setActiveView("terminal");
     }
   };
+
+  // Keyboard shortcut listener
+  //   Ctrl+Shift+P : basculer la palette de commandes
+  //   Ctrl+Shift+T : nouveau terminal
+  //   Ctrl+Shift+F : plein écran
+  // (placé après handleCreateSession : il en dépend)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey) {
+        if (e.key === "P" || e.key === "p") {
+          e.preventDefault();
+          setIsCommandPaletteOpen((prev) => !prev);
+        } else if (e.key === "T" || e.key === "t") {
+          e.preventDefault();
+          void handleCreateSession();
+        } else if (e.key === "F" || e.key === "f") {
+          e.preventDefault();
+          setIsFullscreen((prev) => !prev);
+        }
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [handleCreateSession]);
 
   // Close PTY Session
   const handleCloseSession = useCallback(async (id: string) => {

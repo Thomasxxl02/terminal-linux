@@ -65,17 +65,28 @@ Copiez `.env.example` vers `.env.local` et renseignez :
 | `PORT` | Non | Port HTTP (défaut 3000) |
 | `WS_ALLOWED_ORIGINS` | Non | Origins WebSocket autorisées (anti-CSWSH) |
 
+## ⌨️ Raccourcis clavier
+
+| Raccourci | Action |
+|---|---|
+| `Ctrl+Shift+P` | Basculer la palette de commandes |
+| `Ctrl+Shift+T` | Ouvrir un nouveau terminal |
+| `Ctrl+Shift+F` | Basculer le plein écran |
+
 ## 🏗️ Architecture
 
 ```
 server.ts                  → Express + WebSocket + Vite middleware
-src/backend/routes.ts      → API REST (/api/pty, /api/fs, /api/db, /api/system)
+src/backend/routes.ts      → API REST (/api/pty, /api/fs, /api/auth, /api/system)
 src/backend/sync.ts        → WebSocket (streaming PTY)
-src/backend/services.ts    → PtyService, MaintenanceService, PermissionService
-src/backend/db.ts          → PostgreSQL (hôtes SSH, snippets, playbooks)
-src/backend/security.ts    → Validation d'entrées, anti path traversal
-src-tauri/                 → Couche desktop optionnelle (Rust + portable-pty)
+src/backend/services.ts    → PtyService, PermissionService
+src/backend/security.ts    → Validation d'entrées, anti path traversal, garde-fous FS
+src-tauri/                 → Couche desktop (Rust + portable-pty, keyring OS)
 ```
+
+> Le stockage utilisateur est local (localStorage clair pour les préférences
+> non sensibles, keyring OS pour les commandes/scripts exécutables) — aucune
+> base de données.
 
 ## 🛡️ Sécurité
 

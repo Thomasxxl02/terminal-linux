@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   Sparkles,
   Play,
@@ -324,11 +324,15 @@ export const SkillsHub: React.FC<SkillsHubProps> = ({ onExecuteInTerminal }) => 
   const definedVarNames = newParams.map(p => p.name);
   const unmappedVars = templateVars.filter(v => !definedVarNames.includes(v));
 
-  const filteredSkills = skills.filter(
-    (s) =>
-      s.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      s.category.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      s.description.toLowerCase().includes(searchQuery.toLowerCase())
+  const filteredSkills = useMemo(
+    () =>
+      skills.filter(
+        (s) =>
+          s.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          s.category.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          s.description.toLowerCase().includes(searchQuery.toLowerCase())
+      ),
+    [skills, searchQuery]
   );
 
   return (

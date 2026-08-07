@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef, useMemo } from "react";
 import {
   Search,
   Terminal,
@@ -315,11 +315,15 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
     })),
   ];
 
-  const filteredActions = actions.filter(
-    (a) =>
-      a.title.toLowerCase().includes(query.toLowerCase()) ||
-      (a.description && a.description.toLowerCase().includes(query.toLowerCase())) ||
-      a.category.toLowerCase().includes(query.toLowerCase())
+  const filteredActions = useMemo(
+    () =>
+      actions.filter(
+        (a) =>
+          a.title.toLowerCase().includes(query.toLowerCase()) ||
+          (a.description && a.description.toLowerCase().includes(query.toLowerCase())) ||
+          a.category.toLowerCase().includes(query.toLowerCase())
+      ),
+    [actions, query]
   );
 
   const handleKeyDown = (e: React.KeyboardEvent) => {

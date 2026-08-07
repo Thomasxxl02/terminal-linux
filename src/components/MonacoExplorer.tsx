@@ -1,4 +1,4 @@
-import React, { useRef } from "react";
+import React, { useMemo, useRef } from "react";
 import {
   FolderOpen,
   FilePlus,
@@ -102,10 +102,10 @@ export const MonacoExplorer: React.FC<MonacoExplorerProps> = ({
   onDropTree,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const filteredItems = items.filter((item) => {
+  const filteredItems = useMemo(() => {
     const q = searchQuery.toLowerCase();
-    return !q || item.name.toLowerCase().includes(q);
-  });
+    return !q ? items : items.filter((item) => item.name.toLowerCase().includes(q));
+  }, [items, searchQuery]);
 
   // Télécharge le contenu RÉEL du fichier (fsRead → blob → download)
   const handleDownloadFile = async (item: FileTreeItem) => {
