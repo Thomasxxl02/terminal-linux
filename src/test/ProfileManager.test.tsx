@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, act,} from "@testing-library/react";
+import { render, screen, fireEvent, act, waitFor } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ProfileManager } from "../components/ProfileManager";
 
@@ -176,5 +176,57 @@ describe("ProfileManager Component", () => {
     });
 
     expect(screen.queryByPlaceholderText(/Ex: Python Data Science/i)).not.toBeInTheDocument();
+  });
+
+  it("exporte les profils en JSON (lien de téléchargement réel)", async () => {
+    // useSecureStorage lit le keyring (mocké vide) → les profils par défaut
+    // sont exportés : le lien contient le JSON réel des profils chargés.
+    await act(async () => {
+      render(<ProfileManager {...defaultProps} />);
+    });
+
+    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+    let capturedHref = "";
+    const appendSpy = vi
+      .spyOn(document.body, "appendChild")
+      .mockImplementation((node: Node) => {
+        capturedHref = (node as HTMLAnchorElement).getAttribute("href") ?? "";
+        return node;
+      });
+
+    await act(async () => {
+      fireEvent.click(screen.getByText("Exporter"));
+    });
+
+    expect(clickSpy).toHaveBeenCalled();
+    // Le JSON exporté contient un profil réellement chargé (défaut)
+    expect(decodeURIComponent(capturedHref)).toContain("Bash Standard (Dev)");
+    appendSpy.mockRestore();
+    clickSpy.mockRestore();
+  });
+
+  it("importe les profils depuis un fichier JSON", async () => {
+    await act(async () => {
+      render(<ProfileManager {...defaultProps} />);
+    });
+
+    const file = new File(
+      [JSON.stringify([{ id: "imp1", name: "Profil Importé", shell: "/bin/bash", cwd: "/root", color: "#0f0" }])],
+      "profils.json",
+      { type: "application/json" }
+    );
+
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    await act(async () => {
+      fireEvent.change(input, { target: { files: [file] } });
+    });
+
+    // Le stockage est mis à jour avec les profils importés (le mock
+    // useSecureStorage est statique → on vérifie l'appel de setValue)
+    await waitFor(() => {
+      expect(mockSetValue).toHaveBeenCalledWith([
+        { id: "imp1", name: "Profil Importé", shell: "/bin/bash", cwd: "/root", color: "#0f0" },
+      ]);
+    });
   });
 });

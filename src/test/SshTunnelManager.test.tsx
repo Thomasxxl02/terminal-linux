@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, act } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { SshTunnelManager } from "../components/SshTunnelManager";
 import { apiFetch } from "../lib/api";
@@ -126,5 +126,57 @@ describe("SshTunnelManager Component", () => {
     });
     expect(screen.getByText(/aucune donnée inventée/i)).toBeInTheDocument();
     expect(screen.queryByText(/Simulation/i)).not.toBeInTheDocument();
+  });
+
+  it("exporte les tunnels en JSON (lien de téléchargement réel)", async () => {
+    window.localStorage.setItem("terminal_ssh_tunnels", JSON.stringify([
+      { id: "t1", name: "Tunnel A", hostId: "h1", type: "local", localPort: 8080, remoteHost: "db", remotePort: 3306, status: "inactive" },
+    ]));
+
+    render(<SshTunnelManager onExecuteInTerminal={mockOnExecuteInTerminal} />);
+
+    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+    // Capture le lien créé par le handler avant son retrait (a.remove())
+    let capturedHref = "";
+    const appendSpy = vi
+      .spyOn(document.body, "appendChild")
+      .mockImplementation((node: Node) => {
+        const a = node as HTMLAnchorElement;
+        capturedHref = a.getAttribute("href") ?? "";
+        return node;
+      });
+
+    await act(async () => {
+      fireEvent.click(screen.getByText("Exporter"));
+    });
+
+    // Le lien de téléchargement contient le JSON réel des tunnels
+    expect(clickSpy).toHaveBeenCalled();
+    expect(decodeURIComponent(capturedHref)).toContain('"name": "Tunnel A"');
+    appendSpy.mockRestore();
+    clickSpy.mockRestore();
+  });
+
+  it("importe les tunnels depuis un fichier JSON", async () => {
+    render(<SshTunnelManager onExecuteInTerminal={mockOnExecuteInTerminal} />);
+
+    const file = new File(
+      [
+        JSON.stringify([
+          { id: "imp1", name: "Tunnel Importé", hostId: "h1", type: "dynamic", localPort: 9090, remoteHost: "localhost", remotePort: 0, status: "inactive" },
+        ]),
+      ],
+      "tunnels.json",
+      { type: "application/json" }
+    );
+
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    await act(async () => {
+      fireEvent.change(input, { target: { files: [file] } });
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("Tunnel Importé")).toBeInTheDocument();
+    });
   });
 });

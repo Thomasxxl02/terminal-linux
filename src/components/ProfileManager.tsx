@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import {
   Sliders,
   Plus,
@@ -10,7 +10,9 @@ import {
   BookmarkCheck,
   Activity,
   FileCode2,
-  Cpu
+  Cpu,
+  Download,
+  Upload,
 } from "lucide-react";
 import { ShellProfile, SavedTabSession, TerminalSessionInfo } from "../types";
 import { useSecureStorage } from "../hooks/useSecureStorage";
@@ -99,6 +101,7 @@ export const ProfileManager: React.FC<ProfileManagerProps> = ({
     []
   );
   const savedTabs = savedTabsValue ?? [];
+  const profileFileInputRef = useRef<HTMLInputElement>(null);
   const [editingProfile, setEditingProfile] = useState<ShellProfile | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
@@ -234,6 +237,39 @@ export const ProfileManager: React.FC<ProfileManagerProps> = ({
     }
   };
 
+  // Export JSON des profils (téléchargement du contenu réel)
+  const handleExportProfiles = () => {
+    const dataStr =
+      "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(profiles, null, 2));
+    const a = document.createElement("a");
+    a.setAttribute("href", dataStr);
+    a.setAttribute("download", `profils_shell_${new Date().toISOString().slice(0, 10)}.json`);
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  };
+
+  // Import JSON des profils (fichier .json — validation minimale : tableau)
+  const handleImportProfiles = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const parsed = JSON.parse(String(reader.result));
+        if (!Array.isArray(parsed)) {
+          alert("Format JSON invalide. Le fichier doit contenir un tableau de profils.");
+          return;
+        }
+        setProfiles(parsed as ShellProfile[]);
+      } catch {
+        alert("Erreur de parsing JSON. Vérifiez le contenu du fichier.");
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = "";
+  };
+
   const showNotification = (msg: string) => {
     setSuccessBanner(msg);
     setTimeout(() => setSuccessBanner(null), 3000);
@@ -337,6 +373,29 @@ export const ProfileManager: React.FC<ProfileManagerProps> = ({
             <Plus className="w-4 h-4" />
             <span>Créer un Profil</span>
           </button>
+
+          {/* Export / Import JSON des profils */}
+          <button
+            onClick={handleExportProfiles}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-mono rounded-lg border border-slate-700 transition-colors"
+          >
+            <Download className="w-4 h-4" />
+            <span>Exporter</span>
+          </button>
+          <button
+            onClick={() => profileFileInputRef.current?.click()}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-mono rounded-lg border border-slate-700 transition-colors"
+          >
+            <Upload className="w-4 h-4" />
+            <span>Importer</span>
+          </button>
+          <input
+            ref={profileFileInputRef}
+            type="file"
+            accept=".json"
+            onChange={handleImportProfiles}
+            className="hidden"
+          />
         </div>
       </div>
 

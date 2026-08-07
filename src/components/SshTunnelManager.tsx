@@ -1,6 +1,8 @@
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import {
   Plus,
+  Download,
+  Upload,
   Trash2,
   Edit2,
   Copy,
@@ -41,6 +43,7 @@ export const SshTunnelManager: React.FC<SshTunnelManagerProps> = ({
   const { value: hostsValue } = useSecureStorage<SshHost[]>(STORAGE_KEY_SSH, DEFAULT_SSH_HOSTS);
   const hosts = hostsValue ?? DEFAULT_SSH_HOSTS;
   const [tunnels, setTunnels] = useLocalStorage<SshTunnel[]>(STORAGE_KEY_TUNNELS, DEFAULT_TUNNELS);
+  const tunnelFileInputRef = useRef<HTMLInputElement>(null);
 
   // Filter & UI state
   const [searchQuery, setSearchQuery] = useState("");
@@ -171,6 +174,39 @@ export const SshTunnelManager: React.FC<SshTunnelManagerProps> = ({
 
   const handleDeleteTunnel = (id: string) => {
     setTunnels(tunnels.filter((t) => t.id !== id));
+  };
+
+  // Export JSON (téléchargement du contenu réel — pas de copie partielle)
+  const handleExportTunnels = () => {
+    const dataStr =
+      "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(tunnels, null, 2));
+    const a = document.createElement("a");
+    a.setAttribute("href", dataStr);
+    a.setAttribute("download", `tunnels_ssh_${new Date().toISOString().slice(0, 10)}.json`);
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  };
+
+  // Import JSON (fichier .json — validation minimale : tableau)
+  const handleImportTunnels = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const parsed = JSON.parse(String(reader.result));
+        if (!Array.isArray(parsed)) {
+          alert("Format JSON invalide. Le fichier doit contenir un tableau de tunnels.");
+          return;
+        }
+        setTunnels(parsed as SshTunnel[]);
+      } catch {
+        alert("Erreur de parsing JSON. Vérifiez le contenu du fichier.");
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = "";
   };
 
   const handleToggleTunnelStatus = (id: string) => {
@@ -320,6 +356,27 @@ export const SshTunnelManager: React.FC<SshTunnelManagerProps> = ({
         >
           <Plus className="w-4 h-4 stroke-[3]" /> Créer un Tunnel SSH
         </button>
+
+        {/* Export / Import JSON */}
+        <button
+          onClick={handleExportTunnels}
+          className="px-3 py-2 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 text-xs font-mono rounded-lg flex items-center gap-1.5 transition-colors"
+        >
+          <Download className="w-3.5 h-3.5" /> Exporter
+        </button>
+        <button
+          onClick={() => tunnelFileInputRef.current?.click()}
+          className="px-3 py-2 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 text-xs font-mono rounded-lg flex items-center gap-1.5 transition-colors"
+        >
+          <Upload className="w-3.5 h-3.5" /> Importer
+        </button>
+        <input
+          ref={tunnelFileInputRef}
+          type="file"
+          accept=".json"
+          onChange={handleImportTunnels}
+          className="hidden"
+        />
       </div>
 
       {/* Main Filter & Control Bar */}
