@@ -1,7 +1,14 @@
-import { render, screen, fireEvent, within } from "@testing-library/react";
-import { describe, it, expect, vi } from "vitest";
+import { render, screen, fireEvent, within, waitFor } from "@testing-library/react";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { MonacoExplorer, getDisplayPath } from "../components/MonacoExplorer";
 import { FileTreeItem } from "../types";
+
+vi.mock("../lib/fsApi", () => ({
+  fsRead: vi.fn(),
+  fsWrite: vi.fn(),
+}));
+
+import { fsRead, fsWrite } from "../lib/fsApi";
 
 const items: FileTreeItem[] = [
   { name: "main.rs", path: "/projet/src/main.rs", isDirectory: false, size: 2048 },
@@ -47,7 +54,11 @@ function renderExplorer(overrides: Partial<Parameters<typeof MonacoExplorer>[0]>
 }
 
 describe("MonacoExplorer", () => {
-  it("affiche le chemin courant et les items du dossier", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("affiche les éléments et le chemin courant", () => {
     renderExplorer();
 
     expect(screen.getByText("Système de fichiers local")).toBeInTheDocument();
@@ -167,6 +178,38 @@ describe("MonacoExplorer", () => {
     fireEvent.click(barButtons[1]);
 
     expect(props.onSetRenamingPath).toHaveBeenCalledWith(null);
+  });
+
+  it("télécharge le contenu réel d'un fichier (fsRead → blob)", async () => {
+    (fsRead as ReturnType<typeof vi.fn>).mockResolvedValue({ content: "contenu réel\n" });
+    const createObjectURL = vi.fn(() => "blob:mock");
+    const revokeObjectURL = vi.fn();
+    vi.stubGlobal("URL", { ...URL, createObjectURL, revokeObjectURL });
+
+    renderExplorer();
+    fireEvent.click(screen.getByLabelText("Télécharger main.rs"));
+
+    await waitFor(() => {
+      expect(fsRead).toHaveBeenCalledWith("/projet/src/main.rs");
+    });
+    expect(createObjectURL).toHaveBeenCalled();
+    expect(revokeObjectURL).toHaveBeenCalled();
+    vi.unstubAllGlobals();
+  });
+
+  it("importe un fichier : contenu écrit dans le dossier courant puis refresh", async () => {
+    (fsWrite as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
+    const props = renderExplorer();
+
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+    expect(fileInput).not.toBeNull();
+    const file = new File(["#!/bin/bash\necho ok\n"], "script.sh", { type: "text/plain" });
+    fireEvent.change(fileInput, { target: { files: [file] } });
+
+    await waitFor(() => {
+      expect(fsWrite).toHaveBeenCalledWith("/projet/src/script.sh", "#!/bin/bash\necho ok\n");
+    });
+    expect(props.onFetchTree).toHaveBeenCalledWith("/projet/src");
   });
 });
 

@@ -14,6 +14,7 @@ import {
   XCircle,
   Info,
   ArrowDown,
+  Download,
   RefreshCw,
   Terminal as TerminalIcon
 } from "lucide-react";
@@ -314,6 +315,24 @@ const LogsStreamerInner: React.FC = () => {
   }, [lines, activeTab, filterText]);
 
   // Compute count by level
+  // Export du journal affiché : télécharge les lignes brutes réelles
+  // (pas de données simulées — le contenu exact du buffer).
+  const handleExportLogs = () => {
+    const content = lines.map((l) => l.raw).join("\n");
+    const blob = new Blob([content + (content ? "\n" : "")], {
+      type: "text/plain;charset=utf-8",
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+    a.href = url;
+    a.download = `journal-${stamp}.log`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
+
   const stats = useMemo(() => {
     const counts = { info: 0, warn: 0, error: 0, success: 0, total: lines.length };
     lines.forEach((l) => {
@@ -500,6 +519,17 @@ const LogsStreamerInner: React.FC = () => {
         >
           <XCircle className="w-3.5 h-3.5 text-red-400" />
           Erreurs ({stats.error})
+        </button>
+
+        {/* Export du journal (téléchargement du contenu réel) */}
+        <button
+          onClick={handleExportLogs}
+          className="ml-auto px-3 py-1.5 rounded-md font-medium transition-all flex items-center gap-1.5 text-slate-400 hover:text-emerald-300 hover:bg-emerald-500/10 border border-slate-700/60"
+          title="Télécharger le journal affiché au format .log"
+          aria-label="Télécharger le journal"
+        >
+          <Download className="w-3.5 h-3.5" />
+          Exporter
         </button>
       </div>
 

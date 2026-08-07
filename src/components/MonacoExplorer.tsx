@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useRef } from "react";
 import {
   FolderOpen,
   FilePlus,
@@ -7,6 +7,7 @@ import {
   Folder,
   FileCode,
   UploadCloud,
+  Download,
   Check,
   X,
   Edit3,
@@ -16,6 +17,8 @@ import {
   Search,
 } from "lucide-react";
 import { FileTreeItem } from "../types";
+import { fsRead, fsWrite } from "../lib/fsApi";
+import { errMsg } from "../lib/errors";
 
 export const getDisplayPath = (fullPath: string): string => {
   if (!fullPath) return "";
@@ -98,10 +101,42 @@ export const MonacoExplorer: React.FC<MonacoExplorerProps> = ({
   onDragLeaveTree,
   onDropTree,
 }) => {
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const filteredItems = items.filter((item) => {
     const q = searchQuery.toLowerCase();
     return !q || item.name.toLowerCase().includes(q);
   });
+
+  // Télécharge le contenu RÉEL du fichier (fsRead → blob → download)
+  const handleDownloadFile = async (item: FileTreeItem) => {
+    try {
+      const data = await fsRead(item.path);
+      const blob = new Blob([data.content], { type: "text/plain;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = item.name;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error("[Explorer] Téléchargement impossible", errMsg(e));
+    }
+  };
+
+  // Importe un fichier local : contenu réel écrit dans le dossier courant
+  const handleUploadFile = async (file: File) => {
+    if (!file) return;
+    try {
+      const content = await file.text();
+      const sep = currentPath.endsWith("/") ? "" : "/";
+      await fsWrite(`${currentPath}${sep}${file.name}`, content);
+      onFetchTree(currentPath);
+    } catch (e) {
+      console.error("[Explorer] Import impossible", errMsg(e));
+    }
+  };
 
   return (
     <>
@@ -144,9 +179,28 @@ export const MonacoExplorer: React.FC<MonacoExplorerProps> = ({
             onClick={() => onFetchTree(currentPath)}
             className="p-1 text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 rounded transition-colors"
             title="Rafraîchir"
+            aria-label="Rafraîchir l'explorateur"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loadingTree ? "animate-spin" : ""}`} />
           </button>
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            className="p-1 text-slate-400 hover:text-emerald-400 hover:bg-slate-800/60 rounded transition-colors"
+            title="Importer un fichier dans ce dossier"
+            aria-label="Importer un fichier"
+          >
+            <UploadCloud className="w-3.5 h-3.5" />
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) void handleUploadFile(file);
+              e.target.value = "";
+            }}
+          />
         </div>
       </div>
 
@@ -336,6 +390,19 @@ export const MonacoExplorer: React.FC<MonacoExplorerProps> = ({
 
                   {/* Actions panel on hover */}
                   <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1 transition-opacity shrink-0 ml-1">
+                    {!item.isDirectory && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          void handleDownloadFile(item);
+                        }}
+                        className="p-0.5 text-slate-400 hover:text-emerald-400 hover:bg-slate-850 rounded"
+                        title="Télécharger"
+                        aria-label={`Télécharger ${item.name}`}
+                      >
+                        <Download className="w-3 h-3" />
+                      </button>
+                    )}
                     <button
                       onClick={(e) => {
                         e.stopPropagation();

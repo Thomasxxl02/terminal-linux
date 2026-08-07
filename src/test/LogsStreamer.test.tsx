@@ -231,4 +231,32 @@ describe("LogsStreamer Component", () => {
 
     expect(screen.queryByText(/Temporary debugging line/i)).not.toBeInTheDocument();
   });
+
+  it("exporte le journal affiché via un lien de téléchargement", async () => {
+    // Mock du téléchargement
+    const createObjectURL = vi.fn(() => "blob:mock-url");
+    const revokeObjectURL = vi.fn();
+    vi.stubGlobal("URL", { ...URL, createObjectURL, revokeObjectURL });
+
+    await act(async () => {
+      render(<LogsStreamer />);
+    });
+    await waitFor(() => {
+      expect(MockWebSocket.instances.length).toBeGreaterThan(0);
+    });
+    const ws = MockWebSocket.instances[MockWebSocket.instances.length - 1];
+    await act(async () => {
+      ws.triggerMessage({ type: "history", lines: [] });
+      ws.triggerMessage({ type: "line", line: "ligne exportée [INFO]" });
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByLabelText("Télécharger le journal"));
+    });
+
+    // L'export a construit un objet URL (contenu réel) et l'a libéré
+    expect(createObjectURL).toHaveBeenCalled();
+    expect(revokeObjectURL).toHaveBeenCalledWith("blob:mock-url");
+    vi.unstubAllGlobals();
+  });
 });

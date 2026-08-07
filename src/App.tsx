@@ -14,6 +14,9 @@ import {
 } from "./lib/api";
 import { errMsg } from "./lib/errors";
 import { AuthScreen } from "./components/AuthScreen";
+
+/** Onglets sauvegardés localement (noms/cwd/shells — non sensibles). */
+const SAVED_TABS_KEY = "terminal.savedTabs";
 import {
   closePtySessionWeb,
   createPtySessionWeb,
@@ -37,6 +40,7 @@ export default function App() {
   const [authChecked, setAuthChecked] = useState<boolean>(false);
   const [authRequired, setAuthRequired] = useState<boolean>(true);
   // Rôle réactif (mis à jour au login/logout pour le badge Sidebar)
+  const bootRestoreDone = useRef(false);
   const [userRole, setUserRole] = useState<string | null>(() => getRole());
 
   // Mode Tauri : pas de serveur HTTP → l'authentification JWT n'a pas de
@@ -103,6 +107,10 @@ export default function App() {
         if (tauriSessions.length > 0 && !activeSessionId) {
           setActiveSessionId(tauriSessions[0].id);
         }
+        if (tauriSessions.length === 0 && !bootRestoreDone.current) {
+          bootRestoreDone.current = true;
+          restoreSavedTabs();
+        }
         return;
       }
       const res = await apiFetch("/api/pty/sessions");
@@ -118,6 +126,12 @@ export default function App() {
         setSessions(data.sessions);
         if (data.sessions.length > 0 && !activeSessionId) {
           setActiveSessionId(data.sessions[0].id);
+        }
+        // Aucune session côté serveur (redémarrage) → restaurer les
+        // onglets sauvegardés localement (noms, cwd, shells).
+        if (data.sessions.length === 0 && !bootRestoreDone.current) {
+          bootRestoreDone.current = true;
+          restoreSavedTabs();
         }
       }
     } catch (e) {
@@ -387,6 +401,42 @@ export default function App() {
     }
     setActiveView("terminal");
   }, [createSession]);
+
+  /**
+   * Restaure les onglets sauvegardés localement (après un redémarrage du
+   * serveur/desktop : les processus PTY sont morts, on recrée les onglets
+   * avec leurs noms, cwd et shells). Non sensible → localStorage.
+   */
+  const restoreSavedTabs = useCallback(() => {
+    try {
+      const raw = localStorage.getItem(SAVED_TABS_KEY);
+      if (!raw) return;
+      const tabs = JSON.parse(raw) as SavedTabSession[];
+      if (Array.isArray(tabs) && tabs.length > 0) {
+        handleRestoreSavedTabs(tabs);
+      }
+    } catch (e) {
+      console.warn("[App] Onglets sauvegardés invalides, restauration ignorée", e);
+    }
+  }, [handleRestoreSavedTabs]);
+
+  // Sauvegarde automatique des onglets (noms, cwd, shells) à chaque
+  // changement de sessions — limite 8 onglets, localStorage clair
+  // documenté (données non sensibles).
+  useEffect(() => {
+    if (sessions.length === 0) return;
+    const tabs: SavedTabSession[] = sessions.slice(0, 8).map((s) => ({
+      id: s.id,
+      name: s.name,
+      cwd: s.cwd,
+      shell: s.shell,
+    }));
+    try {
+      localStorage.setItem(SAVED_TABS_KEY, JSON.stringify(tabs));
+    } catch {
+      // Stockage indisponible (mode privé) — silencieux par design
+    }
+  }, [sessions]);
 
   // Launch SSH Session in new PTY tab
   const handleLaunchSshSession = useCallback(async (host: SshHost) => {
