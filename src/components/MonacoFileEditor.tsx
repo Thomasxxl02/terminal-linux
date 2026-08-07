@@ -526,6 +526,7 @@ const MonacoFileEditorInner: React.FC<MonacoFileEditorProps> = ({
             </span>
             <button
               onClick={() => setErrorMessage(null)}
+              aria-label="Fermer l'erreur"
               className="p-1 hover:bg-red-900/40 rounded text-red-400 hover:text-red-200"
             >
               <X className="w-3.5 h-3.5" />

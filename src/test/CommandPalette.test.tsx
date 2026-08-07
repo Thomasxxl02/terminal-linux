@@ -48,6 +48,40 @@ describe("CommandPalette", () => {
     expect(screen.getByText("Basculer vers : Zsh")).toBeInTheDocument();
   });
 
+  it("navigue vers chaque vue via les actions de la palette", () => {
+    const { cleanup } = require("@testing-library/react") as typeof import("@testing-library/react");
+    const vues = [
+      { query: "Monaco", attendu: "monaco" },
+      { query: "Architecture Tauri", attendu: "tauri" },
+      { query: "Snippets Linux", attendu: "snippets" },
+      { query: "Raccourcis Web", attendu: "bookmarks" },
+      { query: "Ressources", attendu: "stats" },
+      { query: "Skills", attendu: "skills" },
+    ];
+
+    for (const { query, attendu } of vues) {
+      const props = renderPalette();
+      const input = screen.getByPlaceholderText(/Tapez une commande ou recherchez/i);
+      fireEvent.change(input, { target: { value: query } });
+      const action = screen.getAllByText(new RegExp(query, "i"))[0];
+      fireEvent.click(action);
+      expect(props.setActiveView).toHaveBeenCalledWith(attendu);
+      cleanup();
+    }
+  });
+
+  it("active le plein écran et le split depuis les actions", () => {
+    const props = renderPalette();
+    const input = screen.getByPlaceholderText(/Tapez une commande ou recherchez/i);
+
+    fireEvent.change(input, { target: { value: "Plein écran" } });
+    fireEvent.click(screen.getAllByText(/Plein écran/i)[0]);
+
+    fireEvent.change(input, { target: { value: "Division" } });
+    fireEvent.click(screen.getAllByText(/Division/i)[0]);
+    expect(props.setSplitMode).toHaveBeenCalled();
+  });
+
   it("filtre les actions selon la recherche", () => {
     renderPalette();
 

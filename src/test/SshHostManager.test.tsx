@@ -97,4 +97,103 @@ describe('SshHostManager Component', () => {
       expect(screen.getByText(/Test Server AWS/i)).toBeInTheDocument();
     });
   });
+
+  it('exécute ping et commande rapide depuis un hôte', async () => {
+    window.localStorage.setItem('terminal_ssh_hosts', JSON.stringify([
+      {
+        id: 'ssh-1',
+        name: 'Serveur Test',
+        host: '10.0.0.5',
+        port: 2222,
+        username: 'admin',
+        authType: 'key',
+        privateKeyPath: '/home/user/.ssh/id_ed25519',
+        quickCommands: [{ id: 'qc1', name: 'Voir uptime', cmd: 'uptime' }],
+      },
+    ]));
+
+    await act(async () => {
+      render(
+        <SshHostManager
+          onExecuteInTerminal={mockOnExecuteInTerminal}
+          onLaunchSshSession={mockOnLaunchSshSession}
+        />
+      );
+    });
+
+    // Ping réel
+    fireEvent.click(await screen.findByTitle('Tester la connectivité (ping)'));
+    expect(mockOnExecuteInTerminal).toHaveBeenCalledWith('ping -c 3 10.0.0.5');
+
+    // Commande rapide : lance la session SSH puis injecte la commande
+    // (le bouton affiche q.name, le title porte la commande)
+    fireEvent.click(await screen.findByTitle('Exécuter : uptime'));
+    expect(mockOnLaunchSshSession).toHaveBeenCalled();
+    // L'injection de la commande est différée de 1200 ms (connexion SSH)
+    await waitFor(
+      () => {
+        expect(mockOnExecuteInTerminal).toHaveBeenCalledWith('uptime');
+      },
+      { timeout: 3000 }
+    );
+  });
+
+  it('exporte les hôtes et refuse un import JSON invalide', async () => {
+    window.localStorage.setItem('terminal_ssh_hosts', JSON.stringify([
+      { id: 'ssh-1', name: 'Export Test', host: '10.0.0.9', port: 22, username: 'root', authType: 'key' },
+    ]));
+
+    await act(async () => {
+      render(
+        <SshHostManager
+          onExecuteInTerminal={mockOnExecuteInTerminal}
+          onLaunchSshSession={mockOnLaunchSshSession}
+        />
+      );
+    });
+
+    // Export → presse-papiers (clipboard mocké par jsdom)
+    const writeTextSpy = vi
+      .spyOn(navigator.clipboard, 'writeText')
+      .mockImplementation(() => Promise.resolve());
+    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
+    fireEvent.click(screen.getByText('Exporter'));
+    await waitFor(() => {
+      expect(writeTextSpy).toHaveBeenCalled();
+    });
+    const exported = JSON.parse(writeTextSpy.mock.calls[0][0] as string) as { name: string }[];
+    expect(exported[0].name).toBe('Export Test');
+    writeTextSpy.mockRestore();
+
+    // Import invalide (pas un tableau) → alerte
+    fireEvent.click(screen.getByText('Importer'));
+    fireEvent.change(screen.getByPlaceholderText(/Mon Serveur/i), {
+      target: { value: '{"pas":"un tableau"}' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Lancer l'Importation/i }));
+    expect(alertSpy).toHaveBeenCalled();
+    alertSpy.mockRestore();
+  });
+
+  it("affiche l'audit de sécurité des hôtes", async () => {
+    window.localStorage.setItem('terminal_ssh_hosts', JSON.stringify([
+      { id: 'ssh-1', name: 'Port 22', host: '10.0.0.1', port: 22, username: 'root', authType: 'password' },
+      { id: 'ssh-2', name: 'Clé OK', host: '10.0.0.2', port: 2222, username: 'admin', authType: 'key', privateKeyPath: '/home/user/.ssh/id' },
+    ]));
+
+    await act(async () => {
+      render(
+        <SshHostManager
+          onExecuteInTerminal={mockOnExecuteInTerminal}
+          onLaunchSshSession={mockOnLaunchSshSession}
+        />
+      );
+    });
+
+    fireEvent.click(screen.getByText('Audit Sécurité'));
+
+    // Port standard 22 + auth password → issues affichées
+    expect(screen.getByText(/Port standard 22 détecté/i)).toBeInTheDocument();
+    expect(screen.getByText(/Authentification par mot de passe/i)).toBeInTheDocument();
+  });
 });

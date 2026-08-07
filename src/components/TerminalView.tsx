@@ -648,6 +648,7 @@ const TerminalViewInner: React.FC<TerminalViewProps> = ({
           onDragOver={handleDragOverTerminal}
           onDragLeave={handleDragLeaveTerminal}
           onDrop={handleDropTerminal}
+          aria-label="Zone de dépôt de fichiers du terminal"
           className="flex-1 w-full h-full p-2 overflow-hidden relative"
         >
           {/* Drag Overlay */}

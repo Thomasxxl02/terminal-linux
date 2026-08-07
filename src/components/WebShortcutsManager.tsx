@@ -382,7 +382,7 @@ const WebShortcutsManagerInner: React.FC<WebShortcutsManagerProps> = ({
             <CheckCircle2 className="w-4 h-4 text-emerald-400" />
             {notificationMsg}
           </span>
-          <button onClick={() => setNotificationMsg(null)} className="text-emerald-400 hover:text-emerald-200">
+          <button onClick={() => setNotificationMsg(null)} aria-label="Fermer la notification" className="text-emerald-400 hover:text-emerald-200">
             <X className="w-3.5 h-3.5" />
           </button>
         </div>
@@ -403,6 +403,7 @@ const WebShortcutsManagerInner: React.FC<WebShortcutsManagerProps> = ({
           {searchQuery && (
             <button
               onClick={() => setSearchQuery("")}
+              aria-label="Effacer la recherche"
               className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
             >
               <X className="w-3.5 h-3.5" />
@@ -481,6 +482,7 @@ const WebShortcutsManagerInner: React.FC<WebShortcutsManagerProps> = ({
                       <Tooltip content={sc.isFavorite ? "Retirer des favoris" : "Ajouter aux favoris"} position="top">
                         <button
                           onClick={() => handleToggleFavorite(sc.id)}
+                          aria-label={sc.isFavorite ? "Retirer des favoris" : "Ajouter aux favoris"}
                           className={`p-1 rounded-md transition-colors ${
                             sc.isFavorite
                               ? "text-amber-400 hover:text-amber-300 bg-amber-500/10"
@@ -521,6 +523,7 @@ const WebShortcutsManagerInner: React.FC<WebShortcutsManagerProps> = ({
                       <Tooltip content="Copier l'adresse URL" position="top">
                         <button
                           onClick={() => handleCopyUrl(sc.url, sc.id)}
+                          aria-label="Copier l'adresse URL"
                           className="p-1.5 text-slate-400 hover:text-slate-200 hover:bg-slate-800 rounded transition-colors"
                         >
                           {copiedId === sc.id ? (
