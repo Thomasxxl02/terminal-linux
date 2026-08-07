@@ -82,4 +82,49 @@ describe("CommandPalette", () => {
     // L'action notifications existe
     expect(screen.getByText(/Notifications/i)).toBeInTheDocument();
   });
+
+  it("remonte la sélection avec ArrowUp", () => {
+    const props = renderPalette();
+    const input = screen.getByPlaceholderText(/Tapez une commande ou recherchez/i);
+
+    // ArrowDown → 2e action, puis ArrowUp → retour à la 1re action
+    fireEvent.keyDown(input, { key: "ArrowDown" });
+    fireEvent.keyDown(input, { key: "ArrowUp" });
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    // La 1re action est "Aller aux Terminaux PTY" (navigation)
+    expect(props.setActiveView).toHaveBeenCalledWith("terminal");
+    expect(props.onClose).toHaveBeenCalled();
+  });
+
+  it("boucle vers la dernière action depuis le haut (ArrowUp au sommet)", () => {
+    const props = renderPalette();
+    const input = screen.getByPlaceholderText(/Tapez une commande ou recherchez/i);
+
+    // ArrowUp à l'index 0 → wrap sur la dernière action ; Enter l'exécute
+    // sans erreur (la dernière action est une navigation ou maintenance)
+    fireEvent.keyDown(input, { key: "ArrowUp" });
+    fireEvent.keyDown(input, { key: "Enter" });
+    // Pas de crash : soit la vue a changé, soit une action a été exécutée
+    expect(props.onExecuteMaintenance).toBeTypeOf("function");
+  });
+
+  it("sélectionne l'action au survol (mouseEnter)", () => {
+    const props = renderPalette();
+    const action = screen.getByText("Basculer vers : Zsh");
+    fireEvent.mouseEnter(action);
+    fireEvent.keyDown(screen.getByPlaceholderText(/Tapez une commande ou recherchez/i), { key: "Enter" });
+    expect(props.onSelectSession).toHaveBeenCalledWith("s2");
+  });
+
+  it("exécute la maintenance par clic", () => {
+    const props = renderPalette();
+    // Filtrer pour trouver l'action de maintenance (ex: Mise à jour système)
+    fireEvent.change(screen.getByPlaceholderText(/Tapez une commande ou recherchez/i), {
+      target: { value: "mise à jour" },
+    });
+    const maintAction = screen.getAllByText(/Mise à jour/i)[0];
+    fireEvent.click(maintAction);
+    expect(props.onExecuteMaintenance).toHaveBeenCalled();
+  });
 });

@@ -56,6 +56,18 @@ describe("SshTunnelFormModal", () => {
     fireEvent.change(screen.getByPlaceholderText("Ex: Redirection PostgreSQL"), {
       target: { value: "Mon Tunnel" },
     });
+    // Interaction avec le bloc distant : port local, port distant, hôte
+    // distant, intervalle keep-alive et option exit-on-failure
+    // (labels sans htmlFor → sélecteurs par rôle)
+    const spinButtons = screen.getAllByRole("spinbutton");
+    fireEvent.change(spinButtons[0], { target: { value: 9090 } }); // Port Local
+    fireEvent.change(spinButtons[1], { target: { value: 443 } }); // Port Distant Cible
+    fireEvent.change(screen.getByPlaceholderText("localhost ou 127.0.0.1"), {
+      target: { value: "db.internal" },
+    });
+    const combos = screen.getAllByRole("combobox");
+    fireEvent.change(combos[1], { target: { value: "60" } }); // Keep-Alive
+    fireEvent.click(screen.getByLabelText("Fermer si échec")); // toggle à false
     fireEvent.click(screen.getByRole("button", { name: "Enregistrer" }));
 
     expect(onSave).toHaveBeenCalledWith(
@@ -63,10 +75,11 @@ describe("SshTunnelFormModal", () => {
         name: "Mon Tunnel",
         hostId: "h1",
         type: "local",
-        localPort: 8080,
-        remoteHost: "localhost",
-        remotePort: 80,
-        exitOnFailure: true,
+        localPort: 9090,
+        remoteHost: "db.internal",
+        remotePort: 443,
+        serverAliveInterval: 60,
+        exitOnFailure: false,
       })
     );
   });

@@ -1,0 +1,68 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Qualité (TS + tests + build + Rust + e2e)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            src-tauri/target
+          key: cargo-${{ hashFiles('src-tauri/Cargo.lock') }}
+
+      - name: Dépendances système (keyring → libsecret)
+        run: sudo apt-get update && sudo apt-get install -y libsecret-1-dev pkg-config
+
+      - name: npm ci
+        run: npm ci
+
+      - name: TypeScript (0 erreur, imports morts interdits)
+        run: npx tsc --noEmit
+
+      - name: Tests unitaires (vitest)
+        run: npm run test
+
+      - name: Build (Vite + server.cjs)
+        run: npm run build
+
+      - name: Rust — check + clippy + tests
+        working-directory: src-tauri
+        run: |
+          cargo check
+          cargo clippy --all-targets -- -D warnings
+          cargo test
+
+      - name: Browsers Playwright (chromium)
+        run: npx playwright install --with-deps chromium
+
+      - name: E2E Playwright (web + auth)
+        run: npx playwright test
+
+      - name: Nettoyage artefacts de test
+        run: rm -rf test-results playwright-report
