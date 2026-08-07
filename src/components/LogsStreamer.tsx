@@ -216,9 +216,28 @@ const LogsStreamerInner: React.FC = () => {
           return;
         }
 
-        // Appels suivants : on ne lit que la fin (50 Ko couvre le deltas)
+        // Appels suivants : ne garder que les NOUVEAUX octets (fin du
+        // buffer). Sans cette extraction, un fichier > 50 Ko dupliquait
+        // tout le buffer lu à chaque poll.
         if (tail.total_size > tauriLastSizeRef.current) {
-          const rawLines = tail.content.split("\n");
+          const delta = tail.total_size - tauriLastSizeRef.current;
+          let newPart = tail.content;
+          if (delta <= tail.content.length) {
+            newPart = tail.content.slice(-delta);
+          } else {
+            // Plus de 50 Ko écrits entre 2 polls : le début du delta est
+            // hors buffer → perte partielle signalée honnêtement.
+            setLines((prev) => [
+              ...prev,
+              {
+                id: `gap-${Date.now()}`,
+                level: "warn",
+                message: `--- ${delta} octets écrits entre deux lectures (dépassement du buffer 50 Ko) — lignes intermédiaires non affichées ---`,
+                raw: `--- ${delta} octets écrits entre deux lectures (dépassement du buffer 50 Ko) — lignes intermédiaires non affichées ---`,
+              },
+            ]);
+          }
+          const rawLines = newPart.split("\n");
           if (rawLines.length > 0 && rawLines[rawLines.length - 1] === "") rawLines.pop();
           const parsed = rawLines.map((l: string) => parseLogLine(l));
           setLines((prev) => [...prev, ...parsed].slice(-2000));
