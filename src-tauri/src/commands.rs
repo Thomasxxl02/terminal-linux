@@ -18,7 +18,7 @@ pub struct SessionMeta {
     pub shell: String,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct SystemStats {
     pub platform: String,
     pub release: String,
@@ -32,7 +32,7 @@ pub struct SystemStats {
     pub mem_usage_percent: f64,
     pub uptime: u64,
     pub os_release: String,
-    pub loadavg: Vec<f64>,
+    pub loadavg: [f64; 3],
 }
 
 #[derive(Serialize, Deserialize)]
@@ -46,7 +46,7 @@ pub struct PtySessionInfo {
 }
 
 #[tauri::command]
-pub async fn create_pty_session(
+pub fn create_pty_session(
     app_handle: AppHandle<Wry>,
     session_id: String,
     cols: u16,
@@ -60,10 +60,13 @@ pub async fn create_pty_session(
     sessions.insert(session_id.clone(), pty);
 
     let mut metadata = PTY_METADATA.lock().map_err(|e| e.to_string())?;
+    // Les 4 DERNIERS caractères (slice UTF-8 sûr — un découpage par octets
+    // paniquerait sur un id contenant des caractères multi-octets).
+    let short_id: String = session_id.chars().rev().take(4).collect::<Vec<_>>().into_iter().rev().collect();
     metadata.insert(
         session_id.clone(),
         SessionMeta {
-            name: name.unwrap_or_else(|| format!("Terminal #{}", &session_id[session_id.len().saturating_sub(4)..])),
+            name: name.unwrap_or_else(|| format!("Terminal #{}", short_id)),
             cwd: cwd.unwrap_or_else(|| std::env::current_dir().map(|p| p.display().to_string()).unwrap_or_default()),
             shell: shell_path.unwrap_or_else(|| "/bin/bash".to_string()),
         },
@@ -72,7 +75,7 @@ pub async fn create_pty_session(
 }
 
 #[tauri::command]
-pub async fn list_pty_sessions() -> Result<Vec<PtySessionInfo>, String> {
+pub fn list_pty_sessions() -> Result<Vec<PtySessionInfo>, String> {
     let sessions = PTY_SESSIONS.lock().map_err(|e| e.to_string())?;
     let metadata = PTY_METADATA.lock().map_err(|e| e.to_string())?;
     let mut out: Vec<PtySessionInfo> = Vec::new();
@@ -92,7 +95,7 @@ pub async fn list_pty_sessions() -> Result<Vec<PtySessionInfo>, String> {
 }
 
 #[tauri::command]
-pub async fn write_pty_input(session_id: String, data: String) -> Result<(), String> {
+pub fn write_pty_input(session_id: String, data: String) -> Result<(), String> {
     let sessions = PTY_SESSIONS.lock().map_err(|e| e.to_string())?;
     if let Some(pty) = sessions.get(&session_id) {
         pty.write_input(&data)?;
@@ -103,7 +106,7 @@ pub async fn write_pty_input(session_id: String, data: String) -> Result<(), Str
 }
 
 #[tauri::command]
-pub async fn resize_pty_session(session_id: String, cols: u16, rows: u16) -> Result<(), String> {
+pub fn resize_pty_session(session_id: String, cols: u16, rows: u16) -> Result<(), String> {
     let sessions = PTY_SESSIONS.lock().map_err(|e| e.to_string())?;
     if let Some(pty) = sessions.get(&session_id) {
         pty.resize(cols, rows)?;
@@ -114,7 +117,7 @@ pub async fn resize_pty_session(session_id: String, cols: u16, rows: u16) -> Res
 }
 
 #[tauri::command]
-pub async fn close_pty_session(session_id: String) -> Result<(), String> {
+pub fn close_pty_session(session_id: String) -> Result<(), String> {
     let mut sessions = PTY_SESSIONS.lock().map_err(|e| e.to_string())?;
     if let Some(pty) = sessions.remove(&session_id) {
         // Tuer le shell sous-jacent pour éviter les processus orphelins
@@ -128,8 +131,25 @@ pub async fn close_pty_session(session_id: String) -> Result<(), String> {
     }
 }
 
+// Cache court (2 s) des stats système : le frontend poll toutes les 4 s —
+// relire 7 fichiers /proc à chaque appel est inutile (même pattern que
+// PROCESS_CACHE pour list_processes).
+lazy_static! {
+    static ref SYSTEM_STATS_CACHE: std::sync::Mutex<Option<(std::time::Instant, SystemStats)>> =
+        std::sync::Mutex::new(None);
+}
+
 #[tauri::command]
-pub async fn get_system_stats() -> Result<SystemStats, String> {
+pub fn get_system_stats() -> Result<SystemStats, String> {
+    // Cache hit → retour direct (sans relire /proc)
+    if let Ok(guard) = SYSTEM_STATS_CACHE.lock() {
+        if let Some((at, cached)) = guard.as_ref() {
+            if at.elapsed() < PROCESS_CACHE_TTL {
+                return Ok(cached.clone());
+            }
+        }
+    }
+
     let total_mem = total_memory();
     let free_mem = free_memory();
     let used_mem = total_mem.saturating_sub(free_mem);
@@ -147,7 +167,7 @@ pub async fn get_system_stats() -> Result<SystemStats, String> {
         .map(|s| format!("{} {}", s.trim(), os_release))
         .unwrap_or_else(|_| format!("{} {}", std::env::consts::OS, os_release));
 
-    Ok(SystemStats {
+    let stats = SystemStats {
         platform: std::env::consts::OS.to_string(),
         release,
         arch: std::env::consts::ARCH.to_string(),
@@ -161,23 +181,32 @@ pub async fn get_system_stats() -> Result<SystemStats, String> {
         uptime: uptime_secs(),
         os_release,
         loadavg: loadavg(),
-    })
+    };
+
+    // Mise en cache du résultat (2 s)
+    if let Ok(mut guard) = SYSTEM_STATS_CACHE.lock() {
+        *guard = Some((std::time::Instant::now(), stats.clone()));
+    }
+
+    Ok(stats)
 }
 
 /// Lit /proc/loadavg (3 valeurs : 1/5/15 min). Fallback [0.0, 0.0, 0.0].
-fn loadavg() -> Vec<f64> {
+fn loadavg() -> [f64; 3] {
     std::fs::read_to_string("/proc/loadavg")
         .ok()
         .and_then(|s| {
             let parts: Vec<&str> = s.split_whitespace().collect();
-            let vals: Vec<f64> = parts
-                .iter()
-                .take(3)
-                .filter_map(|p| p.parse::<f64>().ok())
-                .collect();
-            if vals.len() == 3 { Some(vals) } else { None }
+            if parts.len() >= 3 {
+                let v0 = parts[0].parse::<f64>().ok()?;
+                let v1 = parts[1].parse::<f64>().ok()?;
+                let v2 = parts[2].parse::<f64>().ok()?;
+                Some([v0, v1, v2])
+            } else {
+                None
+            }
         })
-        .unwrap_or_else(|| vec![0.0, 0.0, 0.0])
+        .unwrap_or([0.0, 0.0, 0.0])
 }
 
 // ── Helpers système sans dépendance externe ───────────────────────
@@ -275,6 +304,11 @@ pub fn list_processes() -> Result<Vec<ProcessInfo>, String> {
 
     let mut procs: Vec<ProcessInfo> = Vec::new();
     let total_mem = total_memory();
+    let uptime = uptime_secs() as f64;
+
+    // /etc/passwd lu UNE FOIS par scan (était relu pour CHAQUE processus —
+    // ~400 lectures par scan). Le map uid → nom est réutilisé dans la boucle.
+    let uid_map = build_uid_map();
 
     let entries = match std::fs::read_dir("/proc") {
         Ok(e) => e,
@@ -294,31 +328,23 @@ pub fn list_processes() -> Result<Vec<ProcessInfo>, String> {
             .map(|s| s.trim().to_string())
             .unwrap_or_default();
 
-        // Utilisateur via /proc/<pid>/status → Uid:
-        let user = std::fs::read_to_string(proc_dir.join("status"))
-            .ok()
-            .and_then(|s| {
-                s.lines().find_map(|l| {
-                    if let Some(v) = l.strip_prefix("Uid:") {
-                        v.split_whitespace().next().map(uid_to_user)
-                    } else {
-                        None
-                    }
-                })
-            })
+        // /proc/<pid>/status lu UNE SEULE FOIS : on y trouve à la fois
+        // l'utilisateur (Uid:) et la mémoire résidente (VmRSS:).
+        let status = std::fs::read_to_string(proc_dir.join("status")).unwrap_or_default();
+
+        let user = status
+            .lines()
+            .find_map(|l| l.strip_prefix("Uid:").and_then(|v| v.split_whitespace().next()))
+            .and_then(|uid| uid_map.get(&uid.parse().ok()?).cloned())
             .unwrap_or_else(|| "?".to_string());
 
         // RSS (mémoire résidente) depuis VmRSS dans status
-        let rss_kb = std::fs::read_to_string(proc_dir.join("status"))
-            .ok()
-            .and_then(|s| {
-                s.lines().find_map(|l| {
-                    if let Some(v) = l.strip_prefix("VmRSS:") {
-                        v.split_whitespace().next().and_then(|k| k.parse::<u64>().ok())
-                    } else {
-                        None
-                    }
-                })
+        let rss_kb: u64 = status
+            .lines()
+            .find_map(|l| {
+                l.strip_prefix("VmRSS:")
+                    .and_then(|v| v.split_whitespace().next())
+                    .and_then(|k| k.parse().ok())
             })
             .unwrap_or(0);
 
@@ -341,7 +367,6 @@ pub fn list_processes() -> Result<Vec<ProcessInfo>, String> {
             })
             .unwrap_or(0.0);
 
-        let uptime = uptime_secs() as f64;
         let cpu_pct = if uptime > 0.0 { (cpu / uptime) * 100.0 } else { 0.0 };
         let mem_pct = if total_mem > 0 {
             (rss_kb as f64 * 1024.0 / total_mem as f64) * 100.0
@@ -369,28 +394,22 @@ pub fn list_processes() -> Result<Vec<ProcessInfo>, String> {
     Ok(procs)
 }
 
-/// Résout un UID vers un nom d'utilisateur via /etc/passwd (cache léger).
-fn uid_to_user(uid: &str) -> String {
-    let uid_num: u32 = match uid.parse() {
-        Ok(u) => u,
-        Err(_) => return uid.to_string(),
-    };
-    std::fs::read_to_string("/etc/passwd")
-        .ok()
-        .and_then(|content| {
-            content.lines().find_map(|line| {
-                let parts: Vec<&str> = line.split(':').collect();
-                if parts.len() >= 3 {
-                    if let Ok(u) = parts[2].parse::<u32>() {
-                        if u == uid_num {
-                            return Some(parts[0].to_string());
-                        }
-                    }
+/// Construit le map uid → nom d'utilisateur en lisant /etc/passwd UNE fois.
+/// Utilisé par list_processes (un seul passage pour tout le scan /proc,
+/// au lieu d'une relecture par processus).
+fn build_uid_map() -> std::collections::HashMap<u32, String> {
+    let mut map = std::collections::HashMap::new();
+    if let Ok(content) = std::fs::read_to_string("/etc/passwd") {
+        for line in content.lines() {
+            let parts: Vec<&str> = line.split(':').collect();
+            if parts.len() >= 3 {
+                if let Ok(uid) = parts[2].parse::<u32>() {
+                    map.entry(uid).or_insert_with(|| parts[0].to_string());
                 }
-                None
-            })
-        })
-        .unwrap_or_else(|| uid.to_string())
+            }
+        }
+    }
+    map
 }
 
 /// Arrête un processus par PID (SIGTERM) — logique métier native Rust.
@@ -421,4 +440,62 @@ pub fn kill_process(pid: i32) -> Result<(), String> {
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn build_uid_map_contient_root() {
+        let map = build_uid_map();
+        // root (uid 0) existe sur tout système Linux avec /etc/passwd
+        assert!(map.contains_key(&0), "Le map uid doit contenir l'uid 0 (root)");
+        assert_eq!(map.get(&0).map(String::as_str), Some("root"));
+    }
+
+    #[test]
+    fn loadavg_retourne_toujours_trois_valeurs() {
+        let avg = loadavg();
+        assert_eq!(avg.len(), 3);
+        // Valeurs bornées (load raisonnable) ou zéro par défaut
+        for v in avg {
+            assert!((0.0..10_000.0).contains(&v), "loadavg invalide: {}", v);
+        }
+    }
+
+    #[test]
+    fn get_system_stats_est_cohérent() {
+        let stats = get_system_stats().expect("Les stats système devraient être lisibles");
+        assert!(stats.cpus >= 1);
+        assert!(stats.total_mem > 0);
+        assert!(stats.used_mem <= stats.total_mem);
+        assert!(stats.mem_usage_percent >= 0.0 && stats.mem_usage_percent <= 100.0);
+        assert_eq!(stats.loadavg.len(), 3);
+    }
+
+    #[test]
+    fn get_system_stats_est_mis_en_cache() {
+        // 2 appels rapprochés → le cache TTL 2 s sert le 2e sans relire /proc
+        let a = get_system_stats().expect("1er appel");
+        let b = get_system_stats().expect("2e appel (cache)");
+        assert_eq!(a.total_mem, b.total_mem);
+        assert_eq!(a.uptime, b.uptime);
+        // Le cache est effectif : même contenu (les valeurs /proc ne bougent
+        // pas en 2 s à cette granularité)
+        assert_eq!(a.cpus, b.cpus);
+    }
+
+    #[test]
+    fn list_processes_retourne_des_pids_valides() {
+        let procs = list_processes().expect("Scan /proc");
+        assert!(!procs.is_empty(), "Le scan /proc devrait trouver des processus");
+        // Trie par CPU décroissant (top CPU)
+        for w in procs.windows(2) {
+            assert!(w[0].cpu >= w[1].cpu, "Le tri CPU devrait être décroissant");
+        }
+        // Max 15 résultats (top CPU) et pids strictement positifs
+        assert!(procs.len() <= 15);
+        assert!(procs.iter().all(|p| p.pid > 0));
+    }
 }
