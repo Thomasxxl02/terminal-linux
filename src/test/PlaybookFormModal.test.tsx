@@ -95,4 +95,44 @@ describe("PlaybookFormModal", () => {
     fireEvent.click(screen.getByRole("button", { name: "✕" }));
     expect(onClose).toHaveBeenCalled();
   });
+
+  it("ne soumet pas si le nom est vide et change la catégorie", () => {
+    const onSave = vi.fn();
+    render(<PlaybookFormModal editingPlaybook={null} onSave={onSave} onClose={vi.fn()} />);
+
+    // Nom vide → le submit est ignoré (aucun appel onSave)
+    fireEvent.change(screen.getByPlaceholderText("Ex: Nettoyage et Déploiement"), {
+      target: { value: "   " },
+    });
+    fireEvent.submit(screen.getByText("Enregistrer le Playbook").closest("form")!);
+    expect(onSave).not.toHaveBeenCalled();
+
+    // Changement de catégorie
+    fireEvent.change(screen.getByRole("combobox"), {
+      target: { value: "security" },
+    });
+    expect(screen.getByRole("combobox")).toHaveValue("security");
+  });
+
+  it("modifie la pause et la commande d'une étape puis la retire", () => {
+    render(
+      <PlaybookFormModal editingPlaybook={editingPlaybook} onSave={vi.fn()} onClose={vi.fn()} />
+    );
+
+    // Pause de l'étape 1 (type=number sans label htmlFor → rôle spinbutton)
+    fireEvent.change(screen.getByRole("spinbutton"), {
+      target: { value: "5" },
+    });
+    expect(screen.getByRole("spinbutton")).toHaveValue(5);
+
+    // Commande de l'étape
+    fireEvent.change(screen.getByDisplayValue("echo ok"), {
+      target: { value: "echo modifié" },
+    });
+    expect(screen.getByDisplayValue("echo modifié")).toBeInTheDocument();
+
+    // Retrait de l'étape → plus aucune étape
+    fireEvent.click(screen.getByLabelText("Retirer l'étape Étape 1"));
+    expect(screen.getByText(/Étapes du Pipeline \(0\)/)).toBeInTheDocument();
+  });
 });

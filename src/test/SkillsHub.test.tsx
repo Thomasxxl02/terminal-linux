@@ -83,4 +83,53 @@ describe("SkillsHub Component", () => {
     // Verify custom parameter label is rendered on active skill form
     expect(screen.getByLabelText("Target Branch")).toBeInTheDocument();
   });
+
+  it("remplit catégorie, description et paramètres détaillés du créateur", () => {
+    render(<SkillsHub onExecuteInTerminal={mockOnExecuteInTerminal} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /Créer une Compétence/i }));
+
+    // Catégorie
+    fireEvent.change(screen.getByPlaceholderText("e.g., Git, DevOps, Nettoyage"), {
+      target: { value: "DevOps" },
+    });
+    expect(screen.getByDisplayValue("DevOps")).toBeInTheDocument();
+
+    // Description
+    fireEvent.change(screen.getByPlaceholderText(/Expliquez ce que réalise/i), {
+      target: { value: "Script de déploiement automatique" },
+    });
+    expect(screen.getByDisplayValue("Script de déploiement automatique")).toBeInTheDocument();
+
+    // Renseigner les champs du paramètre AVANT de l'ajouter
+    fireEvent.change(screen.getByPlaceholderText("e.g., branch"), {
+      target: { value: "env" },
+    });
+    fireEvent.change(screen.getByPlaceholderText(/Branche Git/i), {
+      target: { value: "Environnement" },
+    });
+    // Type de champ → select (le champ Options n'apparaît que pour ce type)
+    fireEvent.change(screen.getByText("Texte (Input)").closest("select")!, {
+      target: { value: "select" },
+    });
+    expect(screen.getByPlaceholderText("main, dev, staging, master")).toBeInTheDocument();
+    // Défaut
+    fireEvent.change(screen.getByPlaceholderText("e.g., main"), {
+      target: { value: "main" },
+    });
+    expect(screen.getByDisplayValue("main")).toBeInTheDocument();
+    // Options
+    fireEvent.change(screen.getByPlaceholderText("main, dev, staging, master"), {
+      target: { value: "main, dev" },
+    });
+    expect(screen.getByDisplayValue("main, dev")).toBeInTheDocument();
+
+    // Ajouter le paramètre → il apparaît dans la liste
+    fireEvent.click(screen.getByRole("button", { name: /Ajouter cette variable au formulaire/i }));
+    expect(screen.getByText(/Type : select/i)).toBeInTheDocument();
+
+    // Retrait du paramètre → la ligne disparaît
+    fireEvent.click(screen.getByLabelText("Retirer le paramètre env"));
+    expect(screen.queryByText(/Type : select/i)).not.toBeInTheDocument();
+  });
 });

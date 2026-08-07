@@ -97,4 +97,48 @@ describe("ProfileFormModal", () => {
     });
     expect(setters.setFormCwd).toHaveBeenCalledWith("/home");
   });
+
+  it("propage le changement de shell, de couleur et de script de démarrage", () => {
+    renderModal();
+
+    // Select de l'exécutable shell
+    fireEvent.change(screen.getByText("/bin/zsh").closest("select")!, {
+      target: { value: "/bin/zsh" },
+    });
+    expect(setters.setFormShell).toHaveBeenCalledWith("/bin/zsh");
+
+    // Champ texte de la couleur (le type=color est couvert par le même setter)
+    fireEvent.change(screen.getByDisplayValue("#0f0"), {
+      target: { value: "#ff0000" },
+    });
+    expect(setters.setFormColor).toHaveBeenCalledWith("#ff0000");
+
+    // Script de démarrage
+    fireEvent.change(screen.getByPlaceholderText(/alias ll=/), {
+      target: { value: "alias g=git" },
+    });
+    expect(setters.setFormStartupScript).toHaveBeenCalledWith("alias g=git");
+  });
+
+  it("propage la saisie de la clé de variable d'environnement", () => {
+    renderModal();
+
+    fireEvent.change(screen.getByPlaceholderText("KEY"), {
+      target: { value: "NODE_ENV" },
+    });
+    expect(setters.setEnvPairs).toHaveBeenCalledWith([
+      { key: "NODE_ENV", value: "" },
+    ]);
+  });
+
+  it("propage la saisie de la valeur de variable d'environnement", () => {
+    renderModal();
+
+    fireEvent.change(screen.getByPlaceholderText("VALUE"), {
+      target: { value: "production" },
+    });
+    expect(setters.setEnvPairs).toHaveBeenCalledWith([
+      { key: "", value: "production" },
+    ]);
+  });
 });

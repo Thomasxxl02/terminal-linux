@@ -237,6 +237,7 @@ export function SkillCreatorPanel({
                     </div>
                     <button
                       onClick={() => handleRemoveNewParam(idx)}
+                      aria-label={`Retirer le paramètre ${p.name || idx + 1}`}
                       className="p-1 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded"
                     >
                       <Trash2 className="w-3.5 h-3.5" />

@@ -155,6 +155,7 @@ export const PlaybookFormModal: React.FC<PlaybookFormModalProps> = ({
                     <button
                       type="button"
                       onClick={() => setFormSteps(formSteps.filter((s) => s.id !== step.id))}
+                      aria-label={`Retirer l'étape ${step.title || idx + 1}`}
                       className="absolute top-2.5 right-2.5 text-slate-500 hover:text-red-400 p-1"
                     >
                       <Trash2 className="w-3.5 h-3.5" />

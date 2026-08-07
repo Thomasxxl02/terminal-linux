@@ -1,5 +1,5 @@
 import { render, screen, fireEvent } from '@testing-library/react';
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { Sidebar } from '../components/Sidebar';
 
 describe('Sidebar Component', () => {
@@ -7,6 +7,10 @@ describe('Sidebar Component', () => {
   const mockOnSelectSession = vi.fn();
   const mockOnCreateSession = vi.fn();
   const mockOnCloseSession = vi.fn();
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
 
   const mockSessions = [
     { id: 'session-1', name: 'Bash Main', shell: 'bash', cwd: '/home/user', createdAt: Date.now() },
@@ -63,5 +67,46 @@ describe('Sidebar Component', () => {
     fireEvent.click(sshTab);
 
     expect(mockSetActiveView).toHaveBeenCalledWith('ssh');
+  });
+
+  it('sélectionne une session et ouvre la vue terminal', () => {
+    render(
+      <Sidebar
+        activeView="ssh"
+        setActiveView={mockSetActiveView}
+        sessions={mockSessions}
+        activeSessionId="session-1"
+        onSelectSession={mockOnSelectSession}
+        onCreateSession={mockOnCreateSession}
+        onCloseSession={mockOnCloseSession}
+        systemStats={null}
+      />
+    );
+
+    fireEvent.click(screen.getByText('Bash Main'));
+
+    expect(mockOnSelectSession).toHaveBeenCalledWith('session-1');
+    expect(mockSetActiveView).toHaveBeenCalledWith('terminal');
+  });
+
+  it('ferme une session via le bouton (sans propager le clic)', () => {
+    render(
+      <Sidebar
+        activeView="terminal"
+        setActiveView={mockSetActiveView}
+        sessions={mockSessions}
+        activeSessionId="session-1"
+        onSelectSession={mockOnSelectSession}
+        onCreateSession={mockOnCreateSession}
+        onCloseSession={mockOnCloseSession}
+        systemStats={null}
+      />
+    );
+
+    fireEvent.click(screen.getByTitle('Fermer ce terminal'));
+
+    expect(mockOnCloseSession).toHaveBeenCalledWith('session-1');
+    // stopPropagation : la sélection de session n'est PAS déclenchée
+    expect(mockOnSelectSession).not.toHaveBeenCalled();
   });
 });
