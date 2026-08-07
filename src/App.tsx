@@ -231,11 +231,37 @@ export default function App() {
     fetchSessions();
     fetchSystemStats();
 
-    const interval = setInterval(() => {
-      fetchSystemStats();
-    }, 4000);
+    // Polling des stats : 4s, PAUSÉ quand l'onglet/la fenêtre est caché
+    // (pas de gaspillage CPU / lectures /proc en arrière-plan).
+    let interval: ReturnType<typeof setInterval> | null = null;
+    const startPolling = () => {
+      if (interval) return;
+      interval = setInterval(() => {
+        fetchSystemStats();
+      }, 4000);
+    };
+    const stopPolling = () => {
+      if (interval) {
+        clearInterval(interval);
+        interval = null;
+      }
+    };
 
-    return () => clearInterval(interval);
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") {
+        fetchSystemStats(); // refresh immédiat au retour
+        startPolling();
+      } else {
+        stopPolling();
+      }
+    };
+    handleVisibility();
+    document.addEventListener("visibilitychange", handleVisibility);
+
+    return () => {
+      stopPolling();
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
   }, [fetchSessions, fetchSystemStats]);
 
   // Create new PTY Session (Tauri invoke ou API web)

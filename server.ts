@@ -14,7 +14,9 @@ import { setupWebSockets } from "./src/backend/sync";
 import { PtyService } from "./src/backend/services";
 
 export const app = express();
-const PORT = 3000;
+// Port du serveur : surchargeable via PORT (ex: PORT=8080 npm start).
+// 3000 reste la valeur par défaut (cohérent avec Vite dev et Playwright).
+const PORT = Number(process.env.PORT) || 3000;
 export const server = http.createServer(app);
 
 // Enable trust proxy for reverse proxy environment (Cloud Run / Nginx reverse proxy)
