@@ -105,6 +105,7 @@ export const LogsStreamer: React.FC = () => {
       wsRef.current = ws;
 
       ws.onopen = () => {
+        reconnectAttempts = 0; // connexion rétablie → backoff remis à zéro
         setIsConnected(true);
         setLines([]);
       };
@@ -155,10 +156,26 @@ export const LogsStreamer: React.FC = () => {
 
       ws.onclose = () => {
         setIsConnected(false);
+        scheduleReconnect();
       };
     } catch (e) {
       setErrorMsg(errMsg(e) || "Impossible de démarrer la connexion.");
     }
+  };
+
+  // Reconnexion auto (mode web) : backoff 1s → 2s → 4s → 8s → 10s max,
+  // identique à TerminalView. Un réseau bref ne tue plus le visionneur.
+  let reconnectAttempts = 0;
+  let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  let disposed = false;
+  const scheduleReconnect = () => {
+    if (disposed) return;
+    const delay = Math.min(1000 * 2 ** reconnectAttempts, 10_000);
+    reconnectAttempts += 1;
+    reconnectTimer = setTimeout(() => {
+      reconnectTimer = null;
+      connectWebSocket();
+    }, delay);
   };
 
   // ── Mode Tauri : pas de serveur HTTP → lecture directe du fichier via
@@ -226,8 +243,12 @@ export const LogsStreamer: React.FC = () => {
   useEffect(() => {
     // Mode web uniquement : le mode Tauri utilise le polling Rust (ci-dessus)
     if (isTauri()) return;
+    disposed = false;
+    reconnectAttempts = 0;
     connectWebSocket();
     return () => {
+      disposed = true;
+      if (reconnectTimer) clearTimeout(reconnectTimer);
       if (wsRef.current) {
         wsRef.current.close();
       }

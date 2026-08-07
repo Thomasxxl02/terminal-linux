@@ -195,7 +195,12 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
 
   const handleDragLeaveTerminal = (e: React.DragEvent) => {
     e.preventDefault();
-    setIsDraggingFile(false);
+    // dragleave se déclenche aussi quand le curseur passe sur un élément
+    // ENFANT du conteneur → ne masquer l'overlay que si on quitte vraiment.
+    const related = e.relatedTarget as Node | null;
+    if (!e.currentTarget.contains(related)) {
+      setIsDraggingFile(false);
+    }
   };
 
   const handleDropTerminal = (e: React.DragEvent) => {

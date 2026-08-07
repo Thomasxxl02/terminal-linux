@@ -202,7 +202,7 @@ class LogTailer {
       if (!fs.existsSync(this.filePath)) {
         await fs.promises.writeFile(
           this.filePath,
-          `--- Initialisation du fichier de log : ${path.basename(this.filePath)} ---\n[INFO] ${new Date().toISOString()} Journal créé\n`,
+          `--- Fichier de log créé par le visualiseur : ${path.basename(this.filePath)} ---\n`,
           "utf-8"
         );
       }
