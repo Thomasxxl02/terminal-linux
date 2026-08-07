@@ -10,7 +10,7 @@ fn entry_for(key: &str) -> Result<Entry, String> {
 
 /// Stocke un secret dans le keyring OS (remplace la fausse "obfuscation" XOR).
 #[tauri::command]
-pub async fn secure_set(key: String, value: String) -> Result<(), String> {
+pub fn secure_set(key: String, value: String) -> Result<(), String> {
     let entry = entry_for(&key)?;
     entry
         .set_password(&value)
@@ -19,7 +19,7 @@ pub async fn secure_set(key: String, value: String) -> Result<(), String> {
 
 /// Lit un secret depuis le keyring OS. Retourne null si absent.
 #[tauri::command]
-pub async fn secure_get(key: String) -> Result<Option<String>, String> {
+pub fn secure_get(key: String) -> Result<Option<String>, String> {
     let entry = entry_for(&key)?;
     match entry.get_password() {
         Ok(v) => Ok(Some(v)),
@@ -30,7 +30,7 @@ pub async fn secure_get(key: String) -> Result<Option<String>, String> {
 
 /// Supprime un secret du keyring OS.
 #[tauri::command]
-pub async fn secure_delete(key: String) -> Result<(), String> {
+pub fn secure_delete(key: String) -> Result<(), String> {
     let entry = entry_for(&key)?;
     match entry.delete_credential() {
         Ok(()) => Ok(()),

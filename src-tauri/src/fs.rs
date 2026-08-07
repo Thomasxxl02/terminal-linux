@@ -43,36 +43,30 @@ pub fn fs_tree(dir: Option<String>) -> Result<FsTree, String> {
         return Err("Le chemin spécifié n'est pas un dossier".into());
     }
 
-    let mut entries: Vec<_> = fs::read_dir(&target)
+    // Un seul appel metadata par entrée (is_dir + len ensemble), puis tri
+    // sur les données pré-calculées — évite O(n log n) appels metadata
+    // dans la comparaison de tri.
+    let mut entries: Vec<(String, bool, u64)> = fs::read_dir(&target)
         .map_err(|e| e.to_string())?
         .filter_map(|r| r.ok())
+        .filter_map(|e| {
+            let meta = fs::metadata(e.path()).ok()?;
+            Some((e.file_name().to_string_lossy().to_string(), meta.is_dir(), if meta.is_dir() { 0 } else { meta.len() }))
+        })
         .collect();
     // Dossiers d'abord, puis tri alphabétique (comme la route web)
-    entries.sort_by(|a, b| {
-        let a_dir = a.path().is_dir();
-        let b_dir = b.path().is_dir();
-        b_dir.cmp(&a_dir).then_with(|| a.file_name().cmp(&b.file_name()))
-    });
+    entries.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
 
     let total_count = entries.len();
     let truncated = total_count > MAX_TREE_ITEMS;
     let items: Vec<FsItem> = entries
         .into_iter()
         .take(MAX_TREE_ITEMS)
-        .map(|e| {
-            let p = e.path();
-            let is_dir = p.is_dir();
-            let size = if is_dir {
-                0
-            } else {
-                fs::metadata(&p).map(|m| m.len()).unwrap_or(0)
-            };
-            FsItem {
-                name: e.file_name().to_string_lossy().to_string(),
-                path: p.to_string_lossy().to_string(),
-                is_directory: is_dir,
-                size,
-            }
+        .map(|(name, is_dir, size)| FsItem {
+            path: target.join(&name).to_string_lossy().to_string(),
+            name,
+            is_directory: is_dir,
+            size,
         })
         .collect();
 
@@ -93,13 +87,14 @@ pub fn fs_tree(dir: Option<String>) -> Result<FsTree, String> {
 #[tauri::command]
 pub fn fs_read(path: String) -> Result<FsFile, String> {
     let p = PathBuf::from(&path);
-    if !p.exists() {
-        return Err("Fichier non trouvé".into());
-    }
-    if p.is_dir() {
+    // Un seul appel metadata (exists + is_dir + len ensemble)
+    let meta = match fs::metadata(&p) {
+        Ok(m) => m,
+        Err(_) => return Err("Fichier non trouvé".into()),
+    };
+    if meta.is_dir() {
         return Err("Le chemin spécifié est un dossier, pas un fichier".into());
     }
-    let meta = fs::metadata(&p).map_err(|e| e.to_string())?;
     if meta.len() > MAX_READ_SIZE {
         return Err("Fichier trop volumineux (> 2Mo)".into());
     }
@@ -479,6 +474,35 @@ mod tests {
         let path = temp_log("write", "old");
         fs_write(path.to_string_lossy().to_string(), "nouveau contenu".into(), None).unwrap();
         assert_eq!(std::fs::read_to_string(&path).unwrap(), "nouveau contenu");
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn fs_tree_trie_les_dossiers_dabord() {
+        // Créer un dossier de test avec un fichier et un sous-dossier
+        let dir = std::env::temp_dir().join(format!("fs-tree-test-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join("zz-sous-dossier")).unwrap();
+        std::fs::write(dir.join("aa-fichier.txt"), "x").unwrap();
+
+        let tree = fs_tree(Some(dir.to_string_lossy().to_string())).unwrap();
+        // Dossiers d'abord (zz-sous-dossier avant aa-fichier malgré l'ordre alpha)
+        assert_eq!(tree.items[0].name, "zz-sous-dossier");
+        assert!(tree.items[0].is_directory);
+        assert_eq!(tree.items[1].name, "aa-fichier.txt");
+        assert!(!tree.items[1].is_directory);
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn fs_tree_refuse_un_fichier() {
+        let path = temp_log("tree-refuse", "contenu");
+        // match au lieu d'unwrap_err (FsTree n'implémente pas Debug)
+        let err = match fs_tree(Some(path.to_string_lossy().to_string())) {
+            Err(e) => e,
+            Ok(_) => panic!("fs_tree devrait refuser un fichier"),
+        };
+        assert!(err.contains("pas un dossier"));
         std::fs::remove_file(&path).ok();
     }
 }
