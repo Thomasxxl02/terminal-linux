@@ -133,6 +133,10 @@ export function setupWebSockets(server: http.Server) {
       try {
         const msg = JSON.parse(message.toString());
         if (msg.type === "input" && typeof msg.data === "string") {
+          // Garde-fou : limite la taille d'un message d'entrée (64 Ko).
+          // Un client WS malveillant pourrait sinon flooder le stdin du
+          // processus sans aucune borne (le body HTTP a sa limite, pas WS).
+          if (msg.data.length > 64 * 1024) return;
           session.process.stdin.write(msg.data);
         } else if (msg.type === "resize" && msg.cols && msg.rows) {
           session.cols = msg.cols;

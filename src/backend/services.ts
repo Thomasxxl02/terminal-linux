@@ -151,7 +151,7 @@ export class PtyService {
     proc.stderr.on("data", handleOutput);
 
     proc.on("exit", (code) => {
-      const exitMsg = `\r\n\x1b[33m[Processus terminé avec le code ${code}]\x1b[0m\r\n`;
+      const exitMsg = `\r\n\x1b[33m[Processus terminé avec le code ${code ?? "signal"}]\x1b[0m\r\n`;
       const payload = JSON.stringify({ type: "exit", code });
       for (const client of session.clients) {
         if (client.readyState === 1) {
@@ -182,6 +182,14 @@ export class PtyService {
       } catch {
         // Ignore kill errors
       }
+      // Fermer proprement les clients WebSocket : sans cela la socket
+      // reste ouverte côté client ET côté serveur (fuite de connexions).
+      for (const client of session.clients) {
+        if (client.readyState === 1) {
+          client.close(1000, "PTY session closed");
+        }
+      }
+      session.clients.clear();
       this.ptySessions.delete(id);
       return true;
     }

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Wrench,
   RefreshCw,
@@ -24,7 +24,7 @@ import { useSecureStorage } from "../hooks/useSecureStorage";
 interface MaintenanceHubProps {
   sessions: TerminalSessionInfo[];
   activeSessionId: string | null;
-  onExecuteInTerminal: (command: string) => void;
+  onExecuteInTerminal: (command: string, sessionId?: string) => void;
 }
 
 interface CustomMacro {
@@ -68,6 +68,16 @@ export const MaintenanceHub: React.FC<MaintenanceHubProps> = ({
     activeSessionId || (sessions[0]?.id ?? "")
   );
 
+  // Suivre la session active de l'app si elle change après le montage
+  // (le state initial est figé au 1er rendu — sans ce sync, le sélecteur
+  // resterait sur une session périmée/fermée).
+  useEffect(() => {
+    if (activeSessionId && activeSessionId !== selectedSessionId) {
+      setSelectedSessionId(activeSessionId);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSessionId]);
+
   // Custom persistent macros
   // Macros = commandes shell exécutables (peuvent contenir des secrets)
   // → stockage sécurisé (keyring OS en Tauri, localStorage clair en web)
@@ -101,7 +111,10 @@ export const MaintenanceHub: React.FC<MaintenanceHubProps> = ({
   };
 
   const handleRunTask = (command: string, taskId: string, label: string) => {
-    onExecuteInTerminal(command);
+    // La commande part vers la session choisie dans le sélecteur "Session
+    // cible" (et non vers la session active de l'app — le sélecteur doit
+    // avoir un effet réel).
+    onExecuteInTerminal(command, selectedSessionId || undefined);
     setLastExecutedTask(taskId);
     
     // Append to local activity log

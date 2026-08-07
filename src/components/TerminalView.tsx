@@ -414,10 +414,13 @@ const TerminalViewInner: React.FC<TerminalViewProps> = ({
           } else if (msg.type === "exit") {
             processExited = true; // ne pas reconnecter un processus terminé
             setIsConnected(false);
-            setStatusText(`Processus terminé (code ${msg.code})`);
+            setStatusText(`Processus terminé (code ${msg.code ?? "signal"})`);
+            // Fermer la socket : le serveur a terminé la session (évite une
+            // connexion zombie côté client).
+            ws.close();
             triggerNotification(
               "🔴 Processus PTY Linux Terminé",
-              `Session ${session.name} terminée avec le code de sortie ${msg.code}.`
+              `Session ${session.name} terminée avec le code de sortie ${msg.code ?? "signal"}.`
             );
           }
         } catch {

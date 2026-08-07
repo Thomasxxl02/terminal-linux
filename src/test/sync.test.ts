@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import http from "http";
 import fs from "fs";
 import path from "path";
@@ -239,5 +239,52 @@ describe("WebSockets (sync.ts) — flux PTY et logs", () => {
     // La fermeture est async côté serveur → petite attente
     await new Promise((r) => setTimeout(r, 100));
     expect(session.clients.size).toBe(before);
+  });
+
+  it("deleteSession ferme les clients WebSocket (anti-fuite de sockets)", async () => {
+    const session = ptyService.createSession(
+      `ws_del_${Date.now()}`,
+      "Delete Test",
+      process.cwd()
+    );
+    const ws = await connect(env.port, `/ws/pty?id=${session.id}`);
+    await nextMessage(ws); // connected
+
+    let closed = false;
+    ws.on("close", () => {
+      closed = true;
+    });
+
+    ptyService.deleteSession(session.id);
+
+    // La socket est fermée par le serveur (close propre)
+    await new Promise((r) => setTimeout(r, 200));
+    expect(closed).toBe(true);
+  });
+
+  it("ignore un message d'entrée WS de plus de 64 Ko", async () => {
+    const session = ptyService.createSession(
+      `ws_big_${Date.now()}`,
+      "Big Input Test",
+      process.cwd()
+    );
+    const ws = await connect(env.port, `/ws/pty?id=${session.id}`);
+    await nextMessage(ws); // connected
+
+    // Spy sur stdin.write pour vérifier ce qui est écrit
+    const writeSpy = vi.spyOn(session.process.stdin, "write");
+
+    // Petit message → écrit
+    ws.send(JSON.stringify({ type: "input", data: "echo ok\n" }));
+    // Gros message (> 64 Ko) → ignoré
+    ws.send(JSON.stringify({ type: "input", data: "x".repeat(70 * 1024) }));
+
+    await new Promise((r) => setTimeout(r, 300));
+
+    expect(writeSpy).toHaveBeenCalledTimes(1);
+    expect(writeSpy).toHaveBeenCalledWith("echo ok\n");
+    writeSpy.mockRestore();
+    ws.close();
+    ptyService.deleteSession(session.id);
   });
 });
