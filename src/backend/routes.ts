@@ -18,6 +18,7 @@ import {
 import {
   handleLogin,
   handleLogout,
+  handleRefresh,
   requireAuth,
 } from "./auth";
 
@@ -62,6 +63,7 @@ const loginLimiter = rateLimit({
 
 // 0. Auth APIs + Health (publics — pas de JWT requis)
 router.post("/auth/login", loginLimiter, handleLogin);
+router.post("/auth/refresh", loginLimiter, handleRefresh);
 router.post("/auth/logout", handleLogout);
 router.get("/health", (req, res) => {
   res.json({ status: "ok", service: "Tauri Terminal PTY Backend" });

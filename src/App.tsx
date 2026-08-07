@@ -197,7 +197,7 @@ export default function App() {
   // Login : échange le token statique contre un JWT, puis recharge l'app
   const handleLogin = useCallback(async (staticToken: string) => {
     const result = await login(staticToken);
-    setAuth(result.token, result.role);
+    setAuth(result.token, result.role, result.refreshToken);
     setUserRole(result.role);
     if (!result.authEnabled) {
       // Serveur sans AUTH_SECRET : pas de JWT requis, tout passe

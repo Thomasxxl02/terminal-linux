@@ -46,6 +46,48 @@ export function assertAuthConfigured(): void {
   }
 }
 
+// ── Refresh tokens (rotation) ────────────────────────────────────
+// Un refresh token opaques (32 octets aléatoires) est émis au login et
+// consommé UNE SEULE fois : chaque refresh en émet un nouveau (rotation),
+// ce qui neutralise le vol/rejeu d'un refresh token intercepté.
+const REFRESH_TTL_SECONDS = 30 * 24 * 60 * 60; // 30 jours
+interface RefreshSession {
+  jti: string; // jti du JWT d'origine (pour révocation au logout)
+  role: string;
+  exp: number; // timestamp s
+}
+const refreshSessions = new Map<string, RefreshSession>(); // sha256(refreshToken) -> session
+
+export function issueRefreshToken(role: string, jwtJti: string): string {
+  const token = crypto.randomBytes(32).toString("hex");
+  const hash = crypto.createHash("sha256").update(token).digest("hex");
+  refreshSessions.set(hash, {
+    jti: jwtJti,
+    role,
+    exp: Math.floor(Date.now() / 1000) + REFRESH_TTL_SECONDS,
+  });
+  return token;
+}
+
+/** Consomme (rotation) un refresh token : retourne le rôle ou null. */
+export function consumeRefreshToken(refreshToken: string): { role: string; jti: string } | null {
+  if (typeof refreshToken !== "string" || !refreshToken) return null;
+  const hash = crypto.createHash("sha256").update(refreshToken).digest("hex");
+  const session = refreshSessions.get(hash);
+  // Rotation : l'ancien refresh est consommé même si expiré/invalide
+  refreshSessions.delete(hash);
+  if (!session) return null;
+  if (session.exp < Math.floor(Date.now() / 1000)) return null;
+  return { role: session.role, jti: session.jti };
+}
+
+/** Révoque tous les refresh tokens d'un jti donné (appelé au logout). */
+export function revokeRefreshTokensForJti(jti: string): void {
+  for (const [hash, session] of refreshSessions) {
+    if (session.jti === jti) refreshSessions.delete(hash);
+  }
+}
+
 // ── Révocation (liste noire jti) ─────────────────────────────────
 const revokedTokens = new Map<string, number>(); // jti -> exp (timestamp s)
 let lastRevocationPurge = Date.now();
@@ -232,7 +274,32 @@ export function handleLogin(req: Request, res: Response) {
   }
   const jwt = signToken(role);
   setAuthCookie(res, jwt);
-  return res.json({ token: jwt, role, authEnabled: true });
+  // Le refresh token (rotation) est renvoyé au client pour prolonger la
+  // session après expiration du JWT (12h) — stocké par le frontend.
+  const user = verifyToken(jwt);
+  const refreshToken = user ? issueRefreshToken(role, user.jti) : "";
+  return res.json({ token: jwt, refreshToken, role, authEnabled: true });
+}
+
+/**
+ * POST /api/auth/refresh — échange un refresh token contre un nouveau
+ * JWT + un nouveau refresh token (rotation). L'ancien refresh est
+ * consommé : un refresh token ne peut être utilisé qu'une fois.
+ */
+export function handleRefresh(req: Request, res: Response) {
+  if (!isAuthEnabled()) {
+    return res.json({ token: "", refreshToken: "", role: "guest", authEnabled: false });
+  }
+  const { refreshToken } = req.body || {};
+  const session = consumeRefreshToken(refreshToken);
+  if (!session) {
+    return res.status(401).json({ error: "Refresh token invalide ou expiré" });
+  }
+  const jwt = signToken(session.role);
+  setAuthCookie(res, jwt);
+  const user = verifyToken(jwt);
+  const nextRefresh = user ? issueRefreshToken(session.role, user.jti) : "";
+  return res.json({ token: jwt, refreshToken: nextRefresh, role: session.role, authEnabled: true });
 }
 
 /** POST /api/auth/logout — révoque le JWT courant et efface le cookie. */
@@ -241,6 +308,8 @@ export function handleLogout(req: Request, res: Response) {
   const user = token ? verifyToken(token) : null;
   if (user) {
     revokeToken(user.jti, user.exp);
+    // Révoque aussi les refresh tokens émis pour ce jti
+    revokeRefreshTokensForJti(user.jti);
   }
   clearAuthCookie(res);
   return res.json({ success: true });

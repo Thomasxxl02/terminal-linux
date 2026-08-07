@@ -117,3 +117,96 @@ describe("Auth API", () => {
     expect(res.body.success).toBe(true);
   });
 });
+
+describe("Auth — refresh token (rotation)", () => {
+  it("login renvoie un refresh token", async () => {
+    const res = await request(app)
+      .post("/api/auth/login")
+      .send({ token: "static-admin-token" });
+
+    expect(res.status).toBe(200);
+    expect(res.body.refreshToken).toBeDefined();
+    expect(res.body.refreshToken.length).toBeGreaterThan(32);
+  });
+
+  it("refresh échange un refresh token contre un nouveau JWT + refresh", async () => {
+    const loginRes = await request(app)
+      .post("/api/auth/login")
+      .send({ token: "static-admin-token" });
+    const oldRefresh = loginRes.body.refreshToken;
+
+    const refreshRes = await request(app)
+      .post("/api/auth/refresh")
+      .send({ refreshToken: oldRefresh });
+
+    expect(refreshRes.status).toBe(200);
+    expect(refreshRes.body.token).toBeDefined();
+    expect(refreshRes.body.refreshToken).toBeDefined();
+    expect(refreshRes.body.refreshToken).not.toBe(oldRefresh); // rotation
+    expect(refreshRes.body.role).toBe("admin");
+  });
+
+  it("un refresh token consommé ne peut pas être réutilisé (rotation)", async () => {
+    const loginRes = await request(app)
+      .post("/api/auth/login")
+      .send({ token: "static-admin-token" });
+    const refreshToken = loginRes.body.refreshToken;
+
+    // 1er usage : OK
+    const first = await request(app)
+      .post("/api/auth/refresh")
+      .send({ refreshToken });
+    expect(first.status).toBe(200);
+
+    // 2e usage du MÊME refresh : rejeté (rotation)
+    const second = await request(app)
+      .post("/api/auth/refresh")
+      .send({ refreshToken });
+    expect(second.status).toBe(401);
+  });
+
+  it("refresh refuse un refresh token invalide", async () => {
+    const res = await request(app)
+      .post("/api/auth/refresh")
+      .send({ refreshToken: "token-invalide-xyz" });
+    expect(res.status).toBe(401);
+  });
+
+  it("refresh refuse un refresh token absent", async () => {
+    const res = await request(app).post("/api/auth/refresh").send({});
+    expect(res.status).toBe(401);
+  });
+
+  it("le nouveau JWT émis par refresh fonctionne sur les routes protégées", async () => {
+    const loginRes = await request(app)
+      .post("/api/auth/login")
+      .send({ token: "static-admin-token" });
+
+    const refreshRes = await request(app)
+      .post("/api/auth/refresh")
+      .send({ refreshToken: loginRes.body.refreshToken });
+    const newJwt = refreshRes.body.token;
+
+    const res = await request(app)
+      .get("/api/pty/sessions")
+      .set("Authorization", `Bearer ${newJwt}`);
+    expect(res.status).toBe(200);
+  });
+
+  it("logout révoque aussi le refresh token du jti", async () => {
+    const loginRes = await request(app)
+      .post("/api/auth/login")
+      .send({ token: "static-admin-token" });
+    const jwt = loginRes.body.token;
+    const refreshToken = loginRes.body.refreshToken;
+
+    await request(app)
+      .post("/api/auth/logout")
+      .set("Authorization", `Bearer ${jwt}`);
+
+    const refreshRes = await request(app)
+      .post("/api/auth/refresh")
+      .send({ refreshToken });
+    expect(refreshRes.status).toBe(401);
+  });
+});
