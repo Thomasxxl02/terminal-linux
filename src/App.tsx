@@ -2,7 +2,8 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { Sidebar } from "./components/Sidebar";
 import { AppViews } from "./components/AppViews";
 import { CommandPalette } from "./components/CommandPalette";
-import { TerminalSessionInfo, SystemStats, ShellProfile, SavedTabSession, SshHost } from "./types";
+import { TerminalSessionInfo, SystemStats, ShellProfile, SavedTabSession, SshHost, CommandSnippet, Playbook } from "./types";
+import { useSecureStorage } from "./hooks/useSecureStorage";
 import {
   apiFetch,
   clearAuth,
@@ -39,7 +40,18 @@ export default function App() {
   // Auth state : l'app affiche l'écran de connexion si le serveur exige un JWT
   const [authChecked, setAuthChecked] = useState<boolean>(false);
   const [authRequired, setAuthRequired] = useState<boolean>(true);
-  // Rôle réactif (mis à jour au login/logout pour le badge Sidebar)
+
+  // Snippets & playbooks pour la recherche globale de la palette (mêmes
+  // clés que SnippetsLibrary / PlaybookSequencer — rechargés à chaque
+  // ouverture de la palette via le montage conditionnel).
+  const { value: paletteSnippets } = useSecureStorage<CommandSnippet[]>(
+    "terminal_custom_snippets",
+    []
+  );
+  const { value: palettePlaybooks } = useSecureStorage<Playbook[]>(
+    "tauri_linux_playbooks",
+    []
+  );
   const bootRestoreDone = useRef(false);
   const [userRole, setUserRole] = useState<string | null>(() => getRole());
 
@@ -513,6 +525,9 @@ export default function App() {
         setSplitMode={setSplitMode}
         notificationsEnabled={notificationsEnabled}
         onRequestNotifications={handleRequestNotifications}
+        snippets={paletteSnippets}
+        playbooks={palettePlaybooks}
+        onExecuteInTerminal={handleExecuteInTerminal}
       />
 
       {/* Sidebar Component */}

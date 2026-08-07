@@ -4,6 +4,7 @@ import {
   Terminal,
   Wrench,
   FileCode,
+  Code2,
   Box,
   Bookmark,
   Activity,
@@ -21,14 +22,14 @@ import {
   Globe
 } from "lucide-react";
 
-import { TerminalSessionInfo,} from "../types";
+import { TerminalSessionInfo, CommandSnippet, Playbook } from "../types";
 import { MAINTENANCE_TASKS } from "../constants/snippets";
 import { TERMINAL_THEMES } from "../constants/themes";
 
 export interface CommandPaletteAction {
   id: string;
   title: string;
-  category: "Nav" | "Maintenance" | "Session" | "Theme" | "Split" | "Action";
+  category: "Nav" | "Maintenance" | "Session" | "Theme" | "Split" | "Action" | "Snippet" | "Playbook";
   description?: string;
   icon: React.ElementType;
   badge?: string;
@@ -49,6 +50,9 @@ interface CommandPaletteProps {
   setSplitMode: (mode: "single" | "horizontal" | "vertical") => void;
   onRequestNotifications: () => void;
   notificationsEnabled: boolean;
+  snippets: CommandSnippet[];
+  playbooks: Playbook[];
+  onExecuteInTerminal: (command: string) => void;
 }
 
 export const CommandPalette: React.FC<CommandPaletteProps> = ({
@@ -65,6 +69,9 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
   setSplitMode,
   onRequestNotifications,
   notificationsEnabled,
+  snippets,
+  playbooks,
+  onExecuteInTerminal,
 }) => {
   const [query, setQuery] = useState("");
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -297,6 +304,32 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
       icon: Play,
       action: () => {
         onExecuteMaintenance(t.command);
+        onClose();
+      },
+    })),
+
+    // Snippets exécutables (recherche globale : lancement direct)
+    ...snippets.map((s) => ({
+      id: `snip-${s.id}`,
+      title: `Exécuter le snippet : ${s.title}`,
+      category: "Snippet" as const,
+      description: `$ ${s.command}`,
+      icon: Code2,
+      action: () => {
+        onExecuteInTerminal(s.command);
+        onClose();
+      },
+    })),
+
+    // Playbooks (recherche globale : ouverture du séquenceur)
+    ...playbooks.map((p) => ({
+      id: `pb-${p.id}`,
+      title: `Ouvrir le playbook : ${p.name}`,
+      category: "Playbook" as const,
+      description: `${p.steps.length} étapes — ouvre le séquenceur`,
+      icon: Layers,
+      action: () => {
+        setActiveView("playbooks");
         onClose();
       },
     })),

@@ -23,6 +23,9 @@ function renderPalette(overrides: Partial<Parameters<typeof CommandPalette>[0]> 
     setSplitMode: vi.fn(),
     onRequestNotifications: vi.fn(),
     notificationsEnabled: false,
+    snippets: [],
+    playbooks: [],
+    onExecuteInTerminal: vi.fn(),
     ...overrides,
   };
   render(<CommandPalette {...props} />);
@@ -31,7 +34,7 @@ function renderPalette(overrides: Partial<Parameters<typeof CommandPalette>[0]> 
 
 describe("CommandPalette", () => {
   it("ne rend rien si fermée", () => {
-    const { container } = render(<CommandPalette isOpen={false} onClose={vi.fn()} setActiveView={vi.fn()} sessions={sessions} activeSessionId={null} onSelectSession={vi.fn()} onCreateSession={vi.fn()} onExecuteMaintenance={vi.fn()} onThemeChange={vi.fn()} splitMode="single" setSplitMode={vi.fn()} onRequestNotifications={vi.fn()} notificationsEnabled={false} />);
+    const { container } = render(<CommandPalette isOpen={false} onClose={vi.fn()} setActiveView={vi.fn()} sessions={sessions} activeSessionId={null} onSelectSession={vi.fn()} onCreateSession={vi.fn()} onExecuteMaintenance={vi.fn()} onThemeChange={vi.fn()} splitMode="single" setSplitMode={vi.fn()} onRequestNotifications={vi.fn()} notificationsEnabled={false} snippets={[]} playbooks={[]} onExecuteInTerminal={vi.fn()} />);
     expect(container.innerHTML).toBe("");
   });
 
@@ -126,5 +129,50 @@ describe("CommandPalette", () => {
     const maintAction = screen.getAllByText(/Mise à jour/i)[0];
     fireEvent.click(maintAction);
     expect(props.onExecuteMaintenance).toHaveBeenCalled();
+  });
+
+  it("exécute un snippet depuis la recherche globale", () => {
+    const props = renderPalette({
+      snippets: [
+        {
+          id: "s1",
+          title: "Statut Docker",
+          command: "docker ps",
+          description: "Liste les conteneurs",
+          category: "DevOps",
+        },
+      ],
+    });
+
+    fireEvent.change(screen.getByPlaceholderText(/Tapez une commande ou recherchez/i), {
+      target: { value: "docker" },
+    });
+    fireEvent.click(screen.getByText("Exécuter le snippet : Statut Docker"));
+
+    expect(props.onExecuteInTerminal).toHaveBeenCalledWith("docker ps");
+  });
+
+  it("ouvre le séquenceur depuis un playbook de la recherche globale", () => {
+    const props = renderPalette({
+      playbooks: [
+        {
+          id: "p1",
+          name: "Déploiement",
+          description: "Pipeline prod",
+          category: "deploy",
+          createdAt: 1700000000000,
+          steps: [
+            { id: "st1", title: "Build", command: "npm run build", delaySeconds: 1, stopOnError: true },
+          ],
+        },
+      ],
+    });
+
+    fireEvent.change(screen.getByPlaceholderText(/Tapez une commande ou recherchez/i), {
+      target: { value: "déploiement" },
+    });
+    fireEvent.click(screen.getByText("Ouvrir le playbook : Déploiement"));
+
+    expect(props.setActiveView).toHaveBeenCalledWith("playbooks");
   });
 });
