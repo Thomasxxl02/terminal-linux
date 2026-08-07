@@ -60,11 +60,12 @@ export default defineConfig(() => {
           'src/constants/**',
         ],
         thresholds: {
-          // Protège contre les régressions majeures ; monté au fil des tests
-          lines: 40,
-          functions: 30,
-          branches: 35,
-          statements: 40,
+          // Alignés sur le coverage réel (~74 % lignes) avec une marge de
+          // sécurité : une régression fait échouer le CI.
+          lines: 70,
+          functions: 65,
+          branches: 60,
+          statements: 70,
         },
       },
     },

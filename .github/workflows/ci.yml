@@ -1,8 +1,9 @@
-name: CI
+name: CI/CD
 
 on:
   push:
     branches: [main]
+    tags: ["v*"]
   pull_request:
 
 concurrency:
@@ -11,7 +12,7 @@ concurrency:
 
 jobs:
   quality:
-    name: Qualité (TS + tests + build + Rust + e2e)
+    name: "Qualité — TS, tests, coverage, build, Rust, e2e, audits"
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
@@ -48,21 +49,85 @@ jobs:
       - name: Tests unitaires (vitest)
         run: npm run test
 
-      - name: Build (Vite + server.cjs)
+      - name: "Coverage — seuils 70 % lignes / 60 % branches / 65 % fonctions"
+        run: npm run test:coverage
+
+      - name: Build (Vite + server.cjs + monaco self-host)
         run: npm run build
 
-      - name: Rust — check + clippy + tests
+      - name: "Rust — check, clippy, tests, audit"
         working-directory: src-tauri
         run: |
           cargo check
           cargo clippy --all-targets -- -D warnings
           cargo test
+          cargo audit
+
+      - name: npm audit (dépendances de production)
+        run: npm audit --omit=dev
 
       - name: Browsers Playwright (chromium)
         run: npx playwright install --with-deps chromium
 
-      - name: E2E Playwright (web + auth)
+      - name: E2E Playwright (web + auth + features)
         run: npx playwright test
 
       - name: Nettoyage artefacts de test
         run: rm -rf test-results playwright-report
+
+  release:
+    name: "Bundles desktop — deb + rpm + AppImage"
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    # Déclenché uniquement sur un tag v* (ex: v0.1.0)
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: quality
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            src-tauri/target
+          key: cargo-${{ hashFiles('src-tauri/Cargo.lock') }}
+
+      - name: "Dépendances système — webkit2gtk, librsvg, patchelf, libsecret"
+        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libsecret-1-dev pkg-config
+
+      - name: npm ci + monaco self-host
+        run: npm ci && npm run copy:monaco
+
+      - name: Build des bundles Tauri (deb/rpm/AppImage)
+        run: npx tauri build
+
+      - name: Upload des bundles (artefacts de release)
+        uses: actions/upload-artifact@v4
+        with:
+          name: bundles-linux
+          path: |
+            src-tauri/target/release/bundle/deb/*.deb
+            src-tauri/target/release/bundle/rpm/*.rpm
+            src-tauri/target/release/bundle/appimage/*.AppImage
+          if-no-files-found: error
+
+      - name: GitHub Release (sur tag v*)
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            src-tauri/target/release/bundle/deb/*.deb
+            src-tauri/target/release/bundle/rpm/*.rpm
+            src-tauri/target/release/bundle/appimage/*.AppImage
+          generate_release_notes: true
