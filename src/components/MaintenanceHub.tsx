@@ -459,6 +459,7 @@ export const MaintenanceHub: React.FC<MaintenanceHubProps> = ({
                   <div className="flex items-center gap-1.5 shrink-0">
                     <button
                       onClick={() => handleRunTask(macro.command, macro.id, macro.title)}
+                      aria-label={`Exécuter ${macro.title}`}
                       className="p-1 bg-slate-900 text-emerald-400 hover:bg-emerald-500 hover:text-slate-950 rounded transition-all"
                       title="Exécuter"
                     >

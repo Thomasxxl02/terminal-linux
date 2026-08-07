@@ -212,10 +212,13 @@ function clearAuthCookie(res: Response): void {
 }
 
 // ── Middlewares ───────────────────────────────────────────────────
-/** Middleware : exige un JWT valide. Si l'auth est désactivée, passe (rôle guest). */
+/** Middleware : exige un JWT valide. Si l'auth est désactivée, passe avec
+ *  le rôle admin : le serveur sans AUTH_SECRET est un outil local/standalone,
+ *  aucune restriction de rôle ne doit bloquer l'exécution (guest n'a pas
+ *  execute_terminal → toutes les actions des autres vues seraient en 403). */
 export function requireAuth(req: Request, res: Response, next: NextFunction) {
   if (!isAuthEnabled()) {
-    req.user = { role: "guest", exp: 0, jti: "" };
+    req.user = { role: "admin", exp: 0, jti: "" };
     return next();
   }
   const token = extractCookieToken(req) || extractBearerToken(req);
