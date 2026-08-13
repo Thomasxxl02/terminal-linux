@@ -49,7 +49,9 @@ test.describe("Authentification (serveur AUTH_SECRET actif)", () => {
     await expect(page.getByText(/terminal-linux/i).first()).toBeVisible({
       timeout: 15_000,
     });
-    await expect(page.getByText("/usr/bin/bash").first()).toBeVisible({
+    // Le chemin du shell dépend de l'environnement ($SHELL) :
+    // /usr/bin/bash localement, /bin/bash sur le runner CI → regex agnostique
+    await expect(page.getByText(/\/bin\/bash/).first()).toBeVisible({
       timeout: 10_000,
     });
   });
