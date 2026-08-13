@@ -45,8 +45,8 @@ jobs:
             src-tauri/target
           key: cargo-${{ hashFiles('src-tauri/Cargo.lock') }}
 
-      - name: Dépendances système (keyring → libsecret)
-        run: sudo apt-get update && sudo apt-get install -y libsecret-1-dev pkg-config
+      - name: "Dépendances système — webkit2gtk, GTK3, librsvg, libsecret (Tauri + keyring)"
+        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev libgtk-3-dev libsecret-1-dev pkg-config
 
       - name: Installer cargo-audit (non préinstallé sur le runner)
         run: cargo install cargo-audit --locked || test -x ~/.cargo/bin/cargo-audit
